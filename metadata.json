@@ -1,0 +1,5 @@
+{
+  "name": "한라온 (Hanraon) - 프로젝트 관리 시스템",
+  "description": "탐라영재관 자율회 '한라온'을 위한 전사적 프로젝트 관리(SaaS) 프로그램. WBS, PERT/CPM, 의사결정 알고리즘 및 문서 허브 기능을 제공합니다.",
+  "requestFramePermissions": []
+}
