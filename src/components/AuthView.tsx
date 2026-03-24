@@ -96,6 +96,7 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
                 onChange={e => setUsername(e.target.value)}
                 placeholder="이름을 입력하세요"
                 className="notion-input"
+                autoComplete="username"
                 required
                 autoFocus
               />
@@ -111,6 +112,7 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
                   placeholder="비밀번호를 입력하세요"
                   className="notion-input"
                   style={{ paddingRight: 40 }}
+                  autoComplete="current-password"
                   required
                 />
                 <button
