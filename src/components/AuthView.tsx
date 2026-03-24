@@ -24,7 +24,8 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
 
       if (queryError || !data) throw new Error('ID 또는 비밀번호가 일치하지 않습니다.');
 
-      const mockSession = { user: { id: data.id, email: data.name, name: data.name, role: data.role || 'view' } };
+      // users 테이블에 id 컬럼이 없으므로 name을 id로 사용
+      const mockSession = { user: { id: data.name, email: data.name, name: data.name, role: data.role || 'view' } };
       localStorage.setItem('hallaon_session', JSON.stringify(mockSession));
       onAuthSuccess();
     } catch (err: any) {
