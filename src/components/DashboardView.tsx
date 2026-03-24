@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Clock, Loader, TrendingUp } from 'lucide-r
 
 interface DashboardViewProps {
   tasks: Task[];
+  agendas?: any[];
 }
 
 export const getStatusColor = (status: string) => {
@@ -29,7 +30,7 @@ const STATUS_COLORS_MAP: Record<string, string> = {
 
 const TEAM_OPTIONS = ['PM', 'CD', 'FS', 'DM', 'OPS'];
 
-export const DashboardView = ({ tasks }: DashboardViewProps) => {
+export const DashboardView = ({ tasks, agendas = [] }: DashboardViewProps) => {
   const today = new Date();
   const total = tasks.length;
   const inProgress = tasks.filter(t => ['진행 중', '작업 중'].includes(t.status)).length;
@@ -101,14 +102,46 @@ export const DashboardView = ({ tasks }: DashboardViewProps) => {
         ))}
       </div>
 
-      {/* Progress bar */}
-      <div className="notion-card p-5">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>프로젝트 완료율</div>
-          <div style={{ fontWeight: 800, fontSize: 16, color: '#37B24D' }}>{pct}%</div>
+      {/* Progress + Agendas */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
+        <div className="notion-card p-5">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>프로젝트 완료율</div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: '#37B24D' }}>{pct}%</div>
+          </div>
+          <div className="progress-bar" style={{ marginBottom: 14 }}>
+            <div className="progress-bar-fill" style={{ width: `${pct}%`, background: '#37B24D' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            {[
+              { label: '완료', value: done, color: '#37B24D' },
+              { label: '진행 중', value: inProgress, color: '#2383E2' },
+              { label: '막힘', value: blocked, color: '#E03E3E' },
+              { label: '전체', value: total, color: 'var(--muted-foreground)' },
+            ].map((s, i) => (
+              <div key={i} style={{ textAlign: 'center', flex: 1 }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: s.color, letterSpacing: '-0.03em' }}>{s.value}</div>
+                <div style={{ fontSize: 10, color: 'var(--muted-foreground)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="progress-bar">
-          <div className="progress-bar-fill" style={{ width: `${pct}%`, background: '#37B24D' }} />
+        {/* Agenda summary */}
+        <div className="notion-card p-5">
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>🗂️ 안건 현황</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[
+              { label: '전체', value: agendas.length, color: 'var(--foreground)' },
+              { label: '진행 중', value: agendas.filter((a: any) => a.status === '진행 중').length, color: '#2383E2' },
+              { label: '시작 전', value: agendas.filter((a: any) => a.status === '시작 전').length, color: '#868E96' },
+              { label: '완료', value: agendas.filter((a: any) => a.status === '완료').length, color: '#37B24D' },
+            ].map((s, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
+                <span style={{ color: 'var(--muted-foreground)' }}>{s.label}</span>
+                <span style={{ fontWeight: 700, color: s.color }}>{s.value}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

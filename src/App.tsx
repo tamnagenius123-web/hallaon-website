@@ -2,7 +2,7 @@
  * HALLAON Workspace - Main Application
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from './lib/supabase';
 import { Task, Agenda, Meeting, Decision, PresenceUser } from './types';
@@ -33,6 +33,7 @@ function AppContent() {
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [loading, setLoading] = useState(true);
   const [presenceUsers, setPresenceUsers] = useState<PresenceUser[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     const savedSession = localStorage.getItem('hallaon_session');
@@ -53,51 +54,58 @@ function AppContent() {
   const handleLogout = () => {
     localStorage.removeItem('hallaon_session');
     setSession(null);
+    setTasks([]); setAgendas([]); setMeetings([]); setDecisions([]);
   };
 
   // Realtime Presence
   useEffect(() => {
     if (!session) return;
-    const channel = supabase.channel('online-users', {
-      config: { presence: { key: 'user' } }
+    const channel = supabase.channel('hallaon-presence', {
+      config: { presence: { key: session.user.id } }
     });
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
         const users = Object.values(state).flat() as any[];
         setPresenceUsers(users.map(u => ({
-          user_id: u.user_id,
-          email: u.email,
-          online_at: u.online_at
+          user_id: u.user_id || '',
+          email: u.email || '',
+          online_at: u.online_at || ''
         })));
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           await channel.track({
             user_id: session.user.id,
-            email: session.user.email,
+            email: session.user.name || session.user.email,
             online_at: new Date().toISOString()
           });
         }
       });
-    return () => { channel.unsubscribe(); };
+    return () => { supabase.removeChannel(channel); };
   }, [session]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async (showLoading = true) => {
     if (!session) return;
-    setLoading(true);
+    if (showLoading) setLoading(true);
+    else setRefreshing(true);
     try {
       const [
-        { data: tasksData },
-        { data: agendasData },
-        { data: meetingsData },
-        { data: decisionsData }
+        { data: tasksData, error: t_err },
+        { data: agendasData, error: a_err },
+        { data: meetingsData, error: m_err },
+        { data: decisionsData, error: d_err }
       ] = await Promise.all([
-        supabase.from('tasks').select('*'),
-        supabase.from('agendas').select('*'),
-        supabase.from('meetings').select('*'),
-        supabase.from('decisions').select('*'),
+        supabase.from('tasks').select('*').order('wbs_code', { ascending: true }),
+        supabase.from('agendas').select('*').order('proposed_date', { ascending: false }),
+        supabase.from('meetings').select('*').order('date', { ascending: false }),
+        supabase.from('decisions').select('*').order('created_at', { ascending: false }),
       ]);
+      if (t_err) console.error('tasks 오류:', t_err);
+      if (a_err) console.error('agendas 오류:', a_err);
+      if (m_err) console.error('meetings 오류:', m_err);
+      if (d_err) console.error('decisions 오류:', d_err);
+      
       if (tasksData) setTasks(tasksData);
       if (agendasData) setAgendas(agendasData);
       if (meetingsData) setMeetings(meetingsData);
@@ -106,23 +114,32 @@ function AppContent() {
       console.error('데이터 로딩 오류:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [session]);
 
   useEffect(() => {
     if (!session) return;
-    fetchData();
+    fetchData(true);
 
     // Realtime subscriptions
-    const subs = [
-      supabase.channel('tasks-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, fetchData).subscribe(),
-      supabase.channel('agendas-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'agendas' }, fetchData).subscribe(),
-      supabase.channel('meetings-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, fetchData).subscribe(),
-      supabase.channel('decisions-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'decisions' }, fetchData).subscribe(),
+    const channels = [
+      supabase.channel('rt-tasks')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchData(false))
+        .subscribe(),
+      supabase.channel('rt-agendas')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'agendas' }, () => fetchData(false))
+        .subscribe(),
+      supabase.channel('rt-meetings')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => fetchData(false))
+        .subscribe(),
+      supabase.channel('rt-decisions')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'decisions' }, () => fetchData(false))
+        .subscribe(),
     ];
 
-    return () => { subs.forEach(s => supabase.removeChannel(s)); };
-  }, [session]);
+    return () => { channels.forEach(c => supabase.removeChannel(c)); };
+  }, [session, fetchData]);
 
   if (showIntro) {
     return <IntroAnimation onComplete={() => setShowIntro(false)} />;
@@ -136,29 +153,36 @@ function AppContent() {
     <div style={{ display: 'flex', height: '100vh', background: 'var(--background)', overflow: 'hidden' }}>
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
 
-      <main style={{ flex: 1, overflow: 'auto', padding: '32px 40px' }}>
+      <main style={{ flex: 1, overflow: 'auto', padding: '28px 36px' }}>
         <Header
           activeTab={activeTab}
           presenceUsers={presenceUsers}
-          onRefresh={fetchData}
+          onRefresh={() => fetchData(false)}
         />
 
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300, gap: 12, color: 'var(--muted-foreground)' }}>
-            <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--border)', borderTopColor: 'var(--primary)', animation: 'spin 1s linear infinite' }} />
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            height: 300, gap: 12, color: 'var(--muted-foreground)',
+          }}>
+            <div style={{
+              width: 20, height: 20, borderRadius: '50%',
+              border: '2px solid var(--border)', borderTopColor: 'var(--primary)',
+              animation: 'spin 1s linear infinite',
+            }} />
             <span style={{ fontSize: 14 }}>데이터를 불러오는 중...</span>
           </div>
         ) : (
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
             >
               {activeTab === 'home' && <HomeView onNavigate={setActiveTab} />}
-              {activeTab === 'dashboard' && <DashboardView tasks={tasks} />}
+              {activeTab === 'dashboard' && <DashboardView tasks={tasks} agendas={agendas} />}
               {activeTab === 'tasks' && <TasksView tasks={tasks} />}
               {activeTab === 'gantt' && <GanttView tasks={tasks} />}
               {activeTab === 'docs' && <DocsView meetings={meetings} />}
