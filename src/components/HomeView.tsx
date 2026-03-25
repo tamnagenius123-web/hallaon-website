@@ -142,8 +142,8 @@ export const HomeView = ({ onNavigate }: HomeViewProps) => {
             const members = TEAM_MEMBERS[team] || [];
             const leader = TEAM_LEADERS[team];
             const descMap: Record<string, string> = {
-              PM: '프로젝트 매니지먼트', FS: '풀스택 개발',
-              DM: '데이터 & 마케팅', CD: '콘텐츠 & 디자인', OPS: '운영 & 총괄',
+              PM: '기획총괄', FS: '재무/서기',
+              DM: '인스타/카드 뉴스', CD: '포스터 제작/공모전', OPS: '운영지원/동아리',
             };
             return (
               <div key={team} style={{
