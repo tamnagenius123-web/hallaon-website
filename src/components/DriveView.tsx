@@ -1,12 +1,11 @@
 /**
- * DriveView - Google Drive 연동 파일 탐색기
- * folderId를 동적으로 API에 전달하여 올바른 폴더 내용을 조회
+ * DriveView - Google Drive 연동 파일 탐색기 (업로드 기능 추가)
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Folder, FolderOpen, FileText, Image, Film, Music, Archive, Code,
   Download, ExternalLink, RefreshCw, ChevronRight, ChevronDown,
-  Search, Grid, List, File, ArrowLeft, HardDrive, Loader2, Home
+  Search, Grid, List, File, ArrowLeft, HardDrive, Loader2, Home, Upload // 👈 Upload 아이콘 추가
 } from 'lucide-react';
 
 interface DriveItem {
@@ -83,7 +82,6 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, depth, activeFolderId, onFold
     onFolderClick(node.id, node.name);
 
     if (!expanded) {
-      // 자식 노드 로드 (아직 로드 안 된 경우)
       if (children.length === 0) {
         setLoading(true);
         try {
@@ -154,20 +152,23 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, depth, activeFolderId, onFold
 
 // ───────────── 메인 DriveView ─────────────
 export const DriveView = () => {
-  const [items, setItems] = useState<DriveItem[]>([]);          // 현재 폴더 내 파일 목록
+  const [items, setItems] = useState<DriveItem[]>([]);
   const [treeRoots, setTreeRoots] = useState<TreeNodeData[]>([]);
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbEntry[]>([{ id: 'root', name: 'Drive' }]);
   const [loading, setLoading] = useState(true);
+  
+  // 👇 업로드 로딩 상태 및 파일 입력창 참조 추가
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [preview, setPreview] = useState<DriveItem | null>(null);
 
-  // 현재 활성 폴더 ID (breadcrumbs 마지막)
   const activeFolderId = breadcrumbs[breadcrumbs.length - 1].id;
 
-  // ── API 호출 (folderId가 'root'면 환경변수 폴더, 아니면 해당 폴더)
   const fetchItems = useCallback(async (folderId: string): Promise<DriveItem[]> => {
     const url = folderId === 'root'
       ? '/api/drive'
@@ -181,7 +182,6 @@ export const DriveView = () => {
     return Array.isArray(data) ? data : [];
   }, []);
 
-  // ── 루트 폴더 최초 로드
   const loadRoot = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -205,7 +205,6 @@ export const DriveView = () => {
 
   useEffect(() => { loadRoot(); }, [loadRoot]);
 
-  // ── 폴더 진입: 해당 folderId로 API 호출
   const navigateInto = useCallback(async (folderId: string, folderName: string) => {
     setLoading(true);
     setError(null);
@@ -216,7 +215,6 @@ export const DriveView = () => {
       const data = await fetchItems(folderId);
       setItems(data);
       setBreadcrumbs(prev => {
-        // 이미 있는 breadcrumb이면 그 위치까지 자름
         const idx = prev.findIndex(b => b.id === folderId);
         if (idx !== -1) return prev.slice(0, idx + 1);
         return [...prev, { id: folderId, name: folderName }];
@@ -228,9 +226,8 @@ export const DriveView = () => {
     }
   }, [fetchItems]);
 
-  // ── 브레드크럼 클릭으로 상위 폴더로 이동
   const navigateToCrumb = useCallback(async (crumb: BreadcrumbEntry) => {
-    if (crumb.id === activeFolderId) return; // 이미 현재 위치
+    if (crumb.id === activeFolderId) return;
     setLoading(true);
     setError(null);
     setSearch('');
@@ -250,7 +247,6 @@ export const DriveView = () => {
     }
   }, [activeFolderId, fetchItems]);
 
-  // 트리에서 하위 항목 로드 (트리 전용, 실제 탐색과 별개)
   const loadChildrenForTree = useCallback(async (folderId: string): Promise<DriveItem[]> => {
     return await fetchItems(folderId);
   }, [fetchItems]);
@@ -264,7 +260,51 @@ export const DriveView = () => {
     document.body.removeChild(a);
   };
 
-  // 필터된 목록
+  // 👇 파일 업로드 실행 함수 추가
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Vercel Payload 제한 경고 (약 4MB 이상일 경우)
+    if (file.size > 4 * 1024 * 1024) {
+      alert("파일 크기가 너무 큽니다. (최대 4MB 지원)");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      // 파일을 Base64로 변환하여 전송
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const base64String = (reader.result as string).split(',')[1];
+        
+        const response = await fetch('/api/drive', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            base64: base64String,
+            folderId: activeFolderId
+          }),
+        });
+
+        if (!response.ok) throw new Error("업로드 실패");
+        
+        // 업로드 성공 후 파일 목록 새로고침
+        const data = await fetchItems(activeFolderId);
+        setItems(data);
+      };
+    } catch (err: any) {
+      alert("업로드 중 오류가 발생했습니다: " + err.message);
+    } finally {
+      setUploading(false);
+      // 입력창 초기화 (같은 파일 다시 올릴 수 있도록)
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const displayed = search
     ? items.filter(f => f.name.toLowerCase().includes(search.toLowerCase()))
     : items;
@@ -272,7 +312,6 @@ export const DriveView = () => {
   const folders = displayed.filter(f => f.mimeType.includes('folder'));
   const files   = displayed.filter(f => !f.mimeType.includes('folder'));
 
-  // ─────────────── Render ───────────────
   if (loading && breadcrumbs.length === 1 && items.length === 0) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 320, gap: 12, color: 'var(--muted-foreground)' }}>
@@ -301,7 +340,6 @@ export const DriveView = () => {
           파일 트리
         </div>
 
-        {/* 루트 버튼 */}
         <div
           onClick={() => navigateToCrumb({ id: 'root', name: 'Drive' })}
           style={{
@@ -318,7 +356,6 @@ export const DriveView = () => {
           <span style={{ color: 'var(--foreground)' }}>Drive 루트</span>
         </div>
 
-        {/* 트리 노드들 */}
         {treeRoots.map(node => (
           <TreeNode
             key={node.id}
@@ -393,6 +430,28 @@ export const DriveView = () => {
           >
             <RefreshCw size={13} style={loading ? { animation: 'spin 1s linear infinite' } : {}} />
           </button>
+
+          {/* 👇 파일 업로드 버튼 (숨겨진 input 포함) */}
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileUpload} 
+            style={{ display: 'none' }} 
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            style={{ 
+              padding: '6px 12px', borderRadius: 6, border: 'none', 
+              background: 'var(--primary)', color: '#fff', cursor: uploading ? 'not-allowed' : 'pointer', 
+              display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600,
+              opacity: uploading ? 0.7 : 1
+            }}
+          >
+            {uploading ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Upload size={13} />}
+            {uploading ? '업로드 중...' : '파일 업로드'}
+          </button>
+
         </div>
 
         {/* 파일 통계 */}
