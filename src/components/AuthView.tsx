@@ -76,16 +76,9 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
             gap: 0,
           }}
         >
-          {/* 로고 이미지 */}
+          {/* 로고 이미지 — 어두운 배경이므로 brightness(0) invert(1)로 흰색 처리 */}
           <motion.div
-            animate={{
-              y: [0, -10, 0],
-              filter: [
-                'drop-shadow(0 8px 28px rgba(35,131,226,0.18))',
-                'drop-shadow(0 18px 44px rgba(35,131,226,0.40))',
-                'drop-shadow(0 8px 28px rgba(35,131,226,0.18))',
-              ],
-            }}
+            animate={{ y: [0, -10, 0] }}
             transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
             style={{ marginBottom: 32 }}
           >
@@ -97,6 +90,7 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
                 height: 'auto',
                 objectFit: 'contain',
                 display: 'block',
+                filter: 'brightness(0) invert(1) drop-shadow(0 8px 28px rgba(35,131,226,0.45))',
               }}
             />
           </motion.div>
@@ -189,7 +183,7 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
               <img
                 src="/logo.png"
                 alt="Logo"
-                style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'brightness(1.15) contrast(1.05)' }}
+                style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'brightness(0) invert(1)' }}
               />
             </div>
             <div>

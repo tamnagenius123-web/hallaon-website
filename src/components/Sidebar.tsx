@@ -85,7 +85,7 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => 
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
             }}>
-              <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'brightness(1.1)' }} />
+              <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
             </div>
             <div>
               <div style={{ fontWeight: 700, fontSize: 13, letterSpacing: '-0.01em', color: 'var(--foreground)' }}>HALLAON</div>
@@ -95,7 +95,7 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => 
         )}
         {collapsed && (
           <div style={{ width: 40, height: 40, borderRadius: 10, background: '#111111', padding: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.18)' }}>
-            <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'brightness(1.1)' }} />
+            <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
           </div>
         )}
         {/* Collapse toggle */}

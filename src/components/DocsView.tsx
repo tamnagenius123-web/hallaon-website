@@ -289,14 +289,15 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
     return matchCat && matchSearch;
   }), [meetings, filterCategory, search]);
 
-  // 카테고리별 그룹
+  // 카테고리별 그룹 — '전체 회의' 포함 모든 카테고리
   const grouped = useMemo(() => {
     const g: Record<string, Meeting[]> = {};
-    CATEGORIES.slice(1).forEach(cat => { g[cat] = filtered.filter(m => m.category === cat); });
+    CATEGORIES.forEach(cat => { g[cat] = filtered.filter(m => m.category === cat); });
     return g;
   }, [filtered]);
 
-  const visibleCats = filterCategory === '전체 회의' ? CATEGORIES.slice(1) : [filterCategory];
+  // 전체 회의 필터 선택 시 모든 카테고리 표시 (전체 회의 포함)
+  const visibleCats = filterCategory === '전체 회의' ? CATEGORIES : [filterCategory];
 
   const toggleCat = (cat: string) => {
     setExpandedCategories(prev => {
@@ -390,7 +391,10 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
                   const { emoji } = getMeta(doc);
                   const isActive = doc.id === selectedId;
                   return (
-                    <div key={doc.id} onClick={() => setSelectedId(doc.id)}
+                    <div
+                      key={doc.id}
+                      className="doc-item"
+                      onClick={() => setSelectedId(doc.id)}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 6,
                         padding: '5px 6px 5px 20px', borderRadius: 6,
@@ -398,6 +402,8 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
                         background: isActive ? 'var(--primary)' : 'transparent',
                         color: isActive ? '#fff' : 'var(--foreground)',
                         transition: 'background 0.12s',
+                        position: 'relative', /* z-index 선언 베이스 */
+                        zIndex: 1,
                       }}
                       onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--secondary)'; }}
                       onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
@@ -406,10 +412,20 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
                       <span style={{ fontSize: 12, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: isActive ? 600 : 400 }}>
                         {doc.title}
                       </span>
-                      <button onClick={e => { e.stopPropagation(); handleDelete(doc.id); }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, opacity: 0, color: isActive ? '#fff' : 'var(--muted-foreground)', flexShrink: 0 }}
-                        className="doc-delete-btn">
-                        <Trash2 size={11} />
+                      {/* 휴지통 버튼 — hover 시만 표시, z-index 높게 설정 */}
+                      <button
+                        onClick={e => { e.stopPropagation(); handleDelete(doc.id); }}
+                        onMouseDown={e => e.stopPropagation()}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          padding: '3px 4px', flexShrink: 0, borderRadius: 4,
+                          color: isActive ? '#fff' : 'var(--muted-foreground)',
+                          position: 'relative', zIndex: 10,
+                        }}
+                        className="doc-delete-btn"
+                        title="삭제"
+                      >
+                        <Trash2 size={12} />
                       </button>
                     </div>
                   );
@@ -626,10 +642,27 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
       )}
 
       <style>{`
-        .doc-delete-btn { opacity: 0 !important; transition: opacity 0.15s; }
-        div:hover > .doc-delete-btn { opacity: 1 !important; }
+        /* 삭제 버튼: hover 시만 표시, pointer-events 제어 */
+        .doc-item { position: relative; }
+        .doc-delete-btn { opacity: 0 !important; transition: opacity 0.15s; pointer-events: none; }
+        .doc-item:hover .doc-delete-btn { opacity: 1 !important; pointer-events: auto; }
+
+        /* BlockNote 다크모드 글자색 강제 흰색 */
+        .dark .bn-container,
+        .dark .bn-editor,
+        .dark .bn-block-content,
+        .dark .ProseMirror,
+        .dark .bn-editor p,
+        .dark .bn-editor h1,
+        .dark .bn-editor h2,
+        .dark .bn-editor h3,
+        .dark .bn-editor li,
+        .dark [data-node-type] { color: #e8e8e8 !important; }
+        .dark .bn-editor .is-empty::before { color: #666 !important; }
+        .dark .bn-editor .ProseMirror { color: #e8e8e8 !important; caret-color: #e8e8e8 !important; }
+        /* 라이트모드는 기본 유지 */
         .bn-container { font-family: inherit !important; }
-        .bn-editor { padding: 8px 16px 48px !important; }
+        .bn-editor { padding: 8px 16px 48px !important; min-height: 300px; }
       `}</style>
     </div>
   );

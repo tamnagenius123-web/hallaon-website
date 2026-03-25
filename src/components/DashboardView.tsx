@@ -2,6 +2,7 @@ import React from 'react';
 import { Task } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
 import { AlertTriangle, CheckCircle2, Clock, Loader, TrendingUp } from 'lucide-react';
+import { expandAssignees } from '../lib/orgChart';
 
 interface DashboardViewProps {
   tasks: Task[];
@@ -51,9 +52,17 @@ export const DashboardView = ({ tasks, agendas = [] }: DashboardViewProps) => {
     tasks.reduce((acc, t) => { acc[t.status] = (acc[t.status] || 0) + 1; return acc; }, {} as Record<string, number>)
   ).map(([name, value]) => ({ name, value, color: STATUS_COLORS_MAP[name] || '#868E96' }));
 
-  // Assignee distribution (top 8)
+  // Assignee distribution (top 8) — 콤마 분리 + 팀명 → 멤버 확장
   const assigneeData = Object.entries(
-    tasks.reduce((acc, t) => { if (t.assignee) { acc[t.assignee] = (acc[t.assignee] || 0) + 1; } return acc; }, {} as Record<string, number>)
+    tasks.reduce((acc, t) => {
+      // expandAssignees: 빈값→['미정'], 팀명→멤버 배열, 콤마 분리
+      const names = expandAssignees(t.assignee || '');
+      for (const name of names) {
+        // '미정'은 집계에서 제외
+        if (name !== '미정') acc[name] = (acc[name] || 0) + 1;
+      }
+      return acc;
+    }, {} as Record<string, number>)
   ).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, value]) => ({ name, value }));
 
   // Team stats

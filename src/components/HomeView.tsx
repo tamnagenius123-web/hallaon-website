@@ -1,5 +1,6 @@
 import React from 'react';
-import { ListTodo, BarChart2, Calendar, ClipboardList, Scale, BookOpen, HardDrive } from 'lucide-react';
+import { ListTodo, BarChart2, Calendar, ClipboardList, Scale, BookOpen, HardDrive, Crown, Star } from 'lucide-react';
+import { TEAM_MEMBERS, TEAM_COLORS, TEAM_EMOJI, TEAM_LEADERS, COUNCIL_LEADERS } from '../lib/orgChart';
 
 interface HomeViewProps {
   onNavigate: (tab: string) => void;
@@ -111,26 +112,74 @@ export const HomeView = ({ onNavigate }: HomeViewProps) => {
         </p>
       </div>
 
-      {/* Team Guide */}
+      {/* Org Chart */}
       <div className="notion-card p-5">
-        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>👥 팀 구성</h2>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {[
-            { team: 'PM', color: '#2383E2', desc: '프로젝트 매니지먼트' },
-            { team: 'CD', color: '#AE3EC9', desc: '콘텐츠 & 디자인' },
-            { team: 'FS', color: '#37B24D', desc: '풀스택 개발' },
-            { team: 'DM', color: '#F76707', desc: '데이터 & 마케팅' },
-            { team: 'OPS', color: '#E67700', desc: '운영 & 총괄' },
-          ].map(t => (
-            <div key={t.team} style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
-              borderRadius: 8, background: t.color + '10', border: `1px solid ${t.color}25`,
-            }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: t.color }} />
-              <span style={{ fontWeight: 700, fontSize: 13, color: t.color }}>{t.team}</span>
-              <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{t.desc}</span>
-            </div>
-          ))}
+        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>🏛️ 조직도</h2>
+
+        {/* 회장단 */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>회장단</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {COUNCIL_LEADERS.map(leader => (
+              <div key={leader.name} style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
+                borderRadius: 10, background: 'linear-gradient(135deg, rgba(35,131,226,0.10), rgba(123,97,255,0.08))',
+                border: '1px solid rgba(35,131,226,0.2)',
+              }}>
+                <Crown size={13} color="#F59F00" />
+                <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--foreground)' }}>{leader.name}</span>
+                <span style={{ fontSize: 11, color: '#F59F00', fontWeight: 600 }}>{leader.role}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 팀별 멤버 */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
+          {(['PM', 'FS', 'DM', 'CD', 'OPS'] as const).map(team => {
+            const color = TEAM_COLORS[team];
+            const emoji = TEAM_EMOJI[team];
+            const members = TEAM_MEMBERS[team] || [];
+            const leader = TEAM_LEADERS[team];
+            const descMap: Record<string, string> = {
+              PM: '프로젝트 매니지먼트', FS: '풀스택 개발',
+              DM: '데이터 & 마케팅', CD: '콘텐츠 & 디자인', OPS: '운영 & 총괄',
+            };
+            return (
+              <div key={team} style={{
+                borderRadius: 10, border: `1px solid ${color}25`,
+                background: color + '08', overflow: 'hidden',
+              }}>
+                {/* 팀 헤더 */}
+                <div style={{
+                  padding: '8px 12px', background: color + '15',
+                  borderBottom: `1px solid ${color}20`,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}>
+                  <span style={{ fontSize: 14 }}>{emoji}</span>
+                  <span style={{ fontWeight: 800, fontSize: 13, color }}>{team}</span>
+                  <span style={{ fontSize: 10, color: 'var(--muted-foreground)', marginLeft: 2 }}>{descMap[team]}</span>
+                </div>
+                {/* 멤버 목록 */}
+                <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {members.map(member => (
+                    <div key={member} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                      {member === leader
+                        ? <Star size={10} color={color} fill={color} />
+                        : <div style={{ width: 6, height: 6, borderRadius: '50%', background: color + '60', flexShrink: 0 }} />}
+                      <span style={{
+                        color: member === leader ? color : 'var(--foreground)',
+                        fontWeight: member === leader ? 700 : 400,
+                      }}>{member}</span>
+                      {member === leader && (
+                        <span style={{ fontSize: 9, color, fontWeight: 700, marginLeft: 2 }}>팀장</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

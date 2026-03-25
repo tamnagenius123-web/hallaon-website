@@ -26,19 +26,6 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (id.includes('node_modules')) {
-              if (id.includes('@blocknote')) return 'editor';
-              if (id.includes('@fullcalendar')) return 'calendar';
-              if (id.includes('recharts') || id.includes('d3-')) return 'charts';
-              if (id.includes('react-dom')) return 'react-dom';
-              if (id.includes('react')) return 'react';
-            }
-          },
-        },
-      },
     },
   };
 });
