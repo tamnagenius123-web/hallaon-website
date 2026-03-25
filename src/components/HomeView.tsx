@@ -116,11 +116,11 @@ export const HomeView = ({ onNavigate }: HomeViewProps) => {
         <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>👥 팀 구성</h2>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {[
-            { team: 'PM', color: '#2383E2', desc: '프로젝트 관리' },
-            { team: 'CD', color: '#AE3EC9', desc: '컨텐츠 디자인' },
+            { team: 'PM', color: '#2383E2', desc: '프로젝트 매니지먼트' },
+            { team: 'CD', color: '#AE3EC9', desc: '콘텐츠 & 디자인' },
             { team: 'FS', color: '#37B24D', desc: '풀스택 개발' },
-            { team: 'DM', color: '#F76707', desc: '데이터 관리' },
-            { team: 'OPS', color: '#E67700', desc: '운영' },
+            { team: 'DM', color: '#F76707', desc: '데이터 & 마케팅' },
+            { team: 'OPS', color: '#E67700', desc: '운영 & 총괄' },
           ].map(t => (
             <div key={t.team} style={{
               display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',

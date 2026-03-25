@@ -76,15 +76,16 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => 
       }}
     >
       {/* Logo */}
-      <div style={{ padding: collapsed ? '10px 0 12px' : '10px 8px 12px', marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between' }}>
+      <div style={{ padding: collapsed ? '12px 0 12px' : '12px 8px 12px', marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between' }}>
         {!collapsed && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
-              width: 28, height: 28, borderRadius: 7,
-              background: 'rgba(0,0,0,0.06)', padding: 3, flexShrink: 0,
+              width: 48, height: 48, borderRadius: 10,
+              background: '#111111', padding: 6, flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
             }}>
-              <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'brightness(1.1)' }} />
             </div>
             <div>
               <div style={{ fontWeight: 700, fontSize: 13, letterSpacing: '-0.01em', color: 'var(--foreground)' }}>HALLAON</div>
@@ -93,8 +94,8 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => 
           </div>
         )}
         {collapsed && (
-          <div style={{ width: 28, height: 28, borderRadius: 7, background: 'rgba(0,0,0,0.06)', padding: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: '#111111', padding: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.18)' }}>
+            <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'brightness(1.1)' }} />
           </div>
         )}
         {/* Collapse toggle */}

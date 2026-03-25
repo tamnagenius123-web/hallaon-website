@@ -189,7 +189,7 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
               <img
                 src="/logo.png"
                 alt="Logo"
-                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'brightness(1.15) contrast(1.05)' }}
               />
             </div>
             <div>

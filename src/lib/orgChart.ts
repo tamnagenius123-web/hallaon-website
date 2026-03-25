@@ -34,8 +34,9 @@ export const TEAM_MEMBERS: Record<string, string[]> = {
 
 // 팀 이름이거나 개인 이름인 assignee 문자열을 개인 이름 배열로 확장
 // e.g., "OPS, 김민준" → ["오승우", "신예지", "김민준"]
+// 빈 값 또는 공백만 있는 경우 → ['미정']
 export function expandAssignees(assigneeStr: string): string[] {
-  if (!assigneeStr) return ['미배정'];
+  if (!assigneeStr || !assigneeStr.trim()) return ['미정'];
   const parts = assigneeStr.split(',').map(s => s.trim()).filter(Boolean);
   const names = new Set<string>();
   for (const part of parts) {
@@ -45,7 +46,7 @@ export function expandAssignees(assigneeStr: string): string[] {
       names.add(part);
     }
   }
-  return names.size > 0 ? Array.from(names) : ['미배정'];
+  return names.size > 0 ? Array.from(names) : ['미정'];
 }
 
 // 특정 이름이 속한 팀 반환

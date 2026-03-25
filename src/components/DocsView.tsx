@@ -1,16 +1,20 @@
 /**
- * DocsView — Semi-Notion 문서 허브
- * ContentEditable 기반 풀 블록 에디터 (슬래시 커맨드 포함)
- * Supabase meetings 테이블 완전 호환
+ * DocsView — BlockNote 기반 문서 허브
+ * @blocknote/react BlockNoteView 사용
+ * DB content JSON 자동 파싱 + initialContent 주입
+ * meetings 테이블 사용 (기존 스키마 유지)
  */
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useCreateBlockNote } from '@blocknote/react';
+import { BlockNoteView } from '@blocknote/mantine';
+import '@blocknote/mantine/style.css';
+import type { Block } from '@blocknote/core';
 import { Meeting } from '../types';
 import { supabase } from '../lib/supabase';
 import { useAppContext } from '../App';
 import {
-  Plus, Trash2, X, ChevronRight, ChevronDown, FileText, Clock,
-  Search, BookOpen, Save, Image, Folder, FolderOpen, MoreHorizontal,
-  Bold, Italic, List, Hash, Quote, Code, CheckSquare, Minus, AlignLeft,
+  Plus, Trash2, X, ChevronRight, ChevronDown,
+  Search, BookOpen, Save, Image, Clock,
 } from 'lucide-react';
 import { TEAM_OPTIONS as ORG_TEAMS, TEAM_COLORS as ORG_COLORS } from '../lib/orgChart';
 
@@ -41,117 +45,55 @@ const COVER_GRADIENTS = [
 
 const DOC_EMOJIS = ['📋','📄','📝','📌','📎','📊','📈','💡','🔖','🗒️','📰','📓','📔','📒','📃','🗃️','📑','🔍','✅','⭐'];
 
-// ─── 슬래시 커맨드 정의 ───────────────────────────────────────────────
-const SLASH_COMMANDS = [
-  { id: 'h1',        label: '제목 1',       icon: '# ',   description: '큰 제목',      insert: '# '       },
-  { id: 'h2',        label: '제목 2',       icon: '## ',  description: '중간 제목',    insert: '## '      },
-  { id: 'h3',        label: '제목 3',       icon: '### ', description: '작은 제목',    insert: '### '     },
-  { id: 'bullet',    label: '글머리 목록',  icon: '• ',   description: '불릿 목록',    insert: '- '       },
-  { id: 'numbered',  label: '번호 목록',    icon: '1.',   description: '번호 목록',    insert: '1. '      },
-  { id: 'todo',      label: '할 일',        icon: '☐',    description: '체크리스트',   insert: '- [ ] '   },
-  { id: 'quote',     label: '인용',         icon: '"',    description: '인용문',       insert: '> '       },
-  { id: 'code',      label: '코드 블록',    icon: '</>',  description: '코드 블록',    insert: '```\n\n```'},
-  { id: 'divider',   label: '구분선',       icon: '—',    description: '수평선',       insert: '---'      },
-  { id: 'meeting',   label: '회의록 템플릿', icon: '📋',  description: '회의록 양식',
-    insert: `# 회의 제목\n\n**일시:** ${new Date().toLocaleDateString('ko-KR')}\n**참석자:** \n\n---\n\n## 안건\n\n- \n\n## 논의 내용\n\n\n## 결정 사항\n\n\n## 다음 액션\n\n- [ ] `
-  },
-];
+// DB content → BlockNote Block[] 변환
+function parseContentToBlocks(raw: any): Block[] {
+  // null/undefined
+  if (!raw) return [];
 
-// ─── 마크다운 → HTML 렌더러 ──────────────────────────────────────────
-function renderMarkdown(text: string): string {
-  if (!text) return '<p style="color:var(--muted-foreground);font-style:italic">내용이 없습니다</p>';
-
-  const escape = (s: string) =>
-    s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-  const inlineFormat = (s: string) =>
-    s
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/`(.+?)`/g, '<code style="background:var(--secondary);padding:1px 5px;border-radius:4px;font-size:0.9em">$1</code>')
-      .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noreferrer" style="color:var(--primary);text-decoration:underline">$1</a>');
-
-  const lines = text.split('\n');
-  const out: string[] = [];
-  let inCode = false;
-  let inUl = false, inOl = false, inTodo = false;
-
-  const closeList = () => {
-    if (inUl)   { out.push('</ul>'); inUl = false; }
-    if (inOl)   { out.push('</ol>'); inOl = false; }
-    if (inTodo) { out.push('</ul>'); inTodo = false; }
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // 코드 블록
-    if (line.startsWith('```')) {
-      if (inCode) { out.push('</code></pre>'); inCode = false; }
-      else { closeList(); out.push(`<pre style="background:var(--secondary);border:1px solid var(--border);border-radius:8px;padding:14px 16px;overflow-x:auto;margin:12px 0;font-size:13px;line-height:1.6"><code>`); inCode = true; }
-      continue;
-    }
-    if (inCode) { out.push(escape(line)); continue; }
-
-    // 수평선
-    if (line.match(/^[-*_]{3,}$/)) { closeList(); out.push('<hr style="border:none;border-top:1px solid var(--border);margin:20px 0">'); continue; }
-
-    // 제목
-    const hMatch = line.match(/^(#{1,3})\s(.+)/);
-    if (hMatch) {
-      closeList();
-      const level = hMatch[1].length;
-      const sizes = ['1.75rem','1.35rem','1.1rem'];
-      const weights = ['800','700','600'];
-      out.push(`<h${level} style="font-size:${sizes[level-1]};font-weight:${weights[level-1]};margin:${level===1?'28':'20'}px 0 10px;letter-spacing:-0.03em;line-height:1.25">${inlineFormat(escape(hMatch[2]))}</h${level}>`);
-      continue;
-    }
-
-    // 인용
-    if (line.startsWith('> ')) {
-      closeList();
-      out.push(`<blockquote style="border-left:3px solid var(--primary);margin:12px 0;padding:8px 14px;background:var(--secondary);border-radius:0 6px 6px 0;color:var(--muted-foreground);font-style:italic">${inlineFormat(escape(line.slice(2)))}</blockquote>`);
-      continue;
-    }
-
-    // 체크리스트
-    const todoMatch = line.match(/^- \[(x| )\] (.+)/i);
-    if (todoMatch) {
-      if (!inTodo) { closeList(); out.push('<ul style="list-style:none;padding-left:0;margin:6px 0">'); inTodo = true; }
-      const checked = todoMatch[1].toLowerCase() === 'x';
-      out.push(`<li style="display:flex;align-items:flex-start;gap:8px;padding:3px 0"><input type="checkbox" ${checked?'checked':''} disabled style="margin-top:3px;accent-color:var(--primary)"><span style="${checked?'text-decoration:line-through;color:var(--muted-foreground)':''}">${inlineFormat(escape(todoMatch[2]))}</span></li>`);
-      continue;
-    }
-
-    // 불릿 목록
-    const ulMatch = line.match(/^- (.+)/);
-    if (ulMatch) {
-      if (!inUl) { closeList(); out.push('<ul style="padding-left:20px;margin:6px 0">'); inUl = true; }
-      out.push(`<li style="margin:3px 0">${inlineFormat(escape(ulMatch[1]))}</li>`);
-      continue;
-    }
-
-    // 번호 목록
-    const olMatch = line.match(/^\d+\. (.+)/);
-    if (olMatch) {
-      if (!inOl) { closeList(); out.push('<ol style="padding-left:20px;margin:6px 0">'); inOl = true; }
-      out.push(`<li style="margin:3px 0">${inlineFormat(escape(olMatch[1]))}</li>`);
-      continue;
-    }
-
-    closeList();
-
-    // 빈 줄
-    if (!line.trim()) { out.push('<br>'); continue; }
-
-    out.push(`<p style="margin:4px 0;line-height:1.7">${inlineFormat(escape(line))}</p>`);
+  // 이미 Block[] 배열
+  if (Array.isArray(raw)) {
+    // BlockNote 블록 형식 확인 (type 필드가 있는지)
+    if (raw.length > 0 && raw[0]?.type) return raw as Block[];
+    return [];
   }
-  closeList();
-  if (inCode) out.push('</code></pre>');
-  return out.join('\n');
+
+  // 문자열
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return [];
+    // JSON 배열 파싱 시도
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed) && parsed[0]?.type) return parsed as Block[];
+      } catch {}
+    }
+    // JSON 객체 파싱 시도
+    if (trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed.blocks && Array.isArray(parsed.blocks)) return parsed.blocks as Block[];
+      } catch {}
+    }
+    // 일반 문자열 → paragraph 블록으로 변환
+    return trimmed.split('\n').filter(Boolean).map(line => ({
+      id: Math.random().toString(36).slice(2),
+      type: 'paragraph',
+      props: { textColor: 'default', backgroundColor: 'default', textAlignment: 'left' },
+      content: [{ type: 'text', text: line, styles: {} }],
+      children: [],
+    })) as unknown as Block[];
+  }
+
+  // 객체 (blocks 필드 포함)
+  if (typeof raw === 'object' && raw.blocks && Array.isArray(raw.blocks)) {
+    return raw.blocks as Block[];
+  }
+
+  return [];
 }
 
-// ─── 이모지 선택기 ───────────────────────────────────────────────────
+// ─── 이모지 선택기 ───────────────────────────────────────────────
 const EmojiPicker = ({ onSelect, onClose }: { onSelect: (e: string) => void; onClose: () => void }) => (
   <div onClick={e => e.stopPropagation()}
     style={{
@@ -172,7 +114,7 @@ const EmojiPicker = ({ onSelect, onClose }: { onSelect: (e: string) => void; onC
   </div>
 );
 
-// ─── 커버 선택기 ────────────────────────────────────────────────────
+// ─── 커버 선택기 ────────────────────────────────────────────────
 const CoverPicker = ({ onSelect, onClose }: { onSelect: (g: string) => void; onClose: () => void }) => (
   <div onClick={e => e.stopPropagation()}
     style={{
@@ -195,153 +137,41 @@ const CoverPicker = ({ onSelect, onClose }: { onSelect: (g: string) => void; onC
   </div>
 );
 
-// ─── 인라인 마크다운 에디터 (슬래시 커맨드 지원) ──────────────────
-const MarkdownEditor = ({
-  value,
-  onChange,
+// ─── BlockNote 에디터 래퍼 ──────────────────────────────────────
+const BlockNoteEditor = ({
   docId,
+  initialContent,
+  onSave,
 }: {
-  value: string;
-  onChange: (v: string) => void;
   docId: string;
+  initialContent: Block[];
+  onSave: (blocks: Block[]) => void;
 }) => {
-  const taRef = useRef<HTMLTextAreaElement>(null);
-  const [showSlash, setShowSlash] = useState(false);
-  const [slashFilter, setSlashFilter] = useState('');
-  const [slashPos, setSlashPos] = useState({ top: 0, left: 0 });
-  const [slashStart, setSlashStart] = useState(-1);
-  const [slashIdx, setSlashIdx] = useState(0);
+  const editor = useCreateBlockNote({
+    initialContent: initialContent.length > 0 ? initialContent : undefined,
+  });
 
-  const filtered = useMemo(() =>
-    SLASH_COMMANDS.filter(c => c.label.toLowerCase().includes(slashFilter.toLowerCase()) || c.description.toLowerCase().includes(slashFilter.toLowerCase())),
-    [slashFilter]
-  );
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const insertCommand = useCallback((cmd: typeof SLASH_COMMANDS[0]) => {
-    const ta = taRef.current;
-    if (!ta) return;
-    const cur = ta.selectionStart;
-    const before = value.slice(0, slashStart);
-    const after = value.slice(cur);
-    const newVal = before + cmd.insert + after;
-    onChange(newVal);
-    setShowSlash(false);
-    setSlashStart(-1);
-    // 커서 위치 조정
-    setTimeout(() => {
-      const newCur = before.length + cmd.insert.length;
-      ta.setSelectionRange(newCur, newCur);
-      ta.focus();
-    }, 10);
-  }, [value, slashStart, onChange]);
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (showSlash) {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setSlashIdx(i => Math.min(i + 1, filtered.length - 1)); return; }
-      if (e.key === 'ArrowUp')   { e.preventDefault(); setSlashIdx(i => Math.max(i - 1, 0)); return; }
-      if (e.key === 'Enter' && filtered[slashIdx]) { e.preventDefault(); insertCommand(filtered[slashIdx]); return; }
-      if (e.key === 'Escape') { setShowSlash(false); return; }
-    }
-
-    // Tab → 2 spaces
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const ta = e.currentTarget;
-      const start = ta.selectionStart;
-      const end = ta.selectionEnd;
-      const newVal = value.slice(0, start) + '  ' + value.slice(end);
-      onChange(newVal);
-      setTimeout(() => ta.setSelectionRange(start + 2, start + 2), 0);
-    }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newVal = e.target.value;
-    onChange(newVal);
-
-    const cur = e.target.selectionStart;
-    const lineStart = newVal.lastIndexOf('\n', cur - 1) + 1;
-    const lineText = newVal.slice(lineStart, cur);
-
-    if (lineText.startsWith('/')) {
-      const filter = lineText.slice(1);
-      setSlashFilter(filter);
-      setSlashStart(lineStart);
-      setSlashIdx(0);
-
-      // 슬래시 메뉴 위치 계산
-      const ta = taRef.current;
-      if (ta) {
-        const lines = newVal.slice(0, cur).split('\n');
-        const lineNum = lines.length - 1;
-        const lineH = 24; // 줄 높이 근사값
-        setSlashPos({ top: (lineNum + 1) * lineH + 4, left: 8 });
-      }
-      setShowSlash(true);
-    } else {
-      setShowSlash(false);
-      setSlashStart(-1);
-    }
-  };
+  const handleChange = useCallback(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      onSave(editor.document as Block[]);
+    }, 1500);
+  }, [editor, onSave]);
 
   return (
-    <div style={{ position: 'relative', flex: 1 }}>
-      <textarea
-        ref={taRef}
-        key={docId}
-        value={value}
+    <div style={{ flex: 1, overflowY: 'auto' }}>
+      <BlockNoteView
+        editor={editor}
         onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        onClick={() => setShowSlash(false)}
-        placeholder="내용을 입력하세요... ( / 로 블록 삽입)"
-        style={{
-          width: '100%', height: '100%', minHeight: 400,
-          border: 'none', outline: 'none', resize: 'none',
-          background: 'transparent', color: 'var(--foreground)',
-          fontSize: 15, lineHeight: 1.75, fontFamily: 'inherit',
-          padding: 0, boxSizing: 'border-box',
-        }}
-        spellCheck={false}
+        theme="light"
       />
-
-      {/* 슬래시 커맨드 드롭다운 */}
-      {showSlash && filtered.length > 0 && (
-        <div style={{
-          position: 'absolute', left: slashPos.left, top: slashPos.top,
-          zIndex: 50, background: 'var(--card)',
-          border: '1px solid var(--border)', borderRadius: 10,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-          minWidth: 220, maxHeight: 280, overflowY: 'auto',
-          padding: 4,
-        }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', padding: '4px 8px 2px', letterSpacing: '0.08em' }}>
-            블록 삽입
-          </div>
-          {filtered.map((cmd, idx) => (
-            <div
-              key={cmd.id}
-              onClick={() => insertCommand(cmd)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '7px 10px', borderRadius: 6, cursor: 'pointer',
-                background: idx === slashIdx ? 'var(--secondary)' : 'none',
-              }}
-              onMouseEnter={() => setSlashIdx(idx)}
-            >
-              <span style={{ fontSize: 14, width: 22, textAlign: 'center', fontWeight: 700, color: 'var(--primary)' }}>{cmd.icon}</span>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{cmd.label}</div>
-                <div style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{cmd.description}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 };
 
-// ─── 메인 DocsView ──────────────────────────────────────────────────
+// ─── 메인 DocsView ──────────────────────────────────────────────
 export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
   const { optimisticAddMeeting, optimisticUpdateMeeting, optimisticDeleteMeeting } = useAppContext();
 
@@ -365,56 +195,26 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
   const [showDocEmoji, setShowDocEmoji] = useState(false);
   const [showDocCover, setShowDocCover] = useState(false);
 
-  // Editor text content — key로 selectedId를 사용해 doc 전환 시 완전 리셋
-  const [editorText, setEditorText] = useState('');
-  const [isPreview, setIsPreview] = useState(false);
-  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // initialMeetings 동기
   useEffect(() => { setMeetings(initialMeetings); }, [initialMeetings]);
 
   const selectedMeeting = useMemo(() => meetings.find(m => m.id === selectedId) ?? null, [meetings, selectedId]);
 
-  // doc 전환 시 에디터 텍스트 로드 (selectedId 변경 시만)
-  useEffect(() => {
-    if (!selectedMeeting) { setEditorText(''); return; }
-    const raw = selectedMeeting.content;
-    if (typeof raw === 'string') {
-      setEditorText(raw);
-    } else if (Array.isArray(raw)) {
-      // 배열 형식(blocknote 레거시) → 텍스트 추출
-      const texts = raw.map((b: any) => {
-        const content = b.content ?? [];
-        const text = Array.isArray(content)
-          ? content.map((c: any) => c.text ?? '').join('')
-          : '';
-        if (b.type === 'heading') return `${'#'.repeat(b.props?.level ?? 1)} ${text}`;
-        if (b.type === 'bulletListItem') return `- ${text}`;
-        if (b.type === 'numberedListItem') return `1. ${text}`;
-        if (b.type === 'checkListItem') return `- [${b.props?.checked ? 'x' : ' '}] ${text}`;
-        if (b.type === 'quote') return `> ${text}`;
-        if (b.type === 'codeBlock') return `\`\`\`\n${text}\n\`\`\``;
-        return text;
-      });
-      setEditorText(texts.join('\n'));
-    } else if (raw && typeof raw === 'object' && (raw as any).markdown) {
-      setEditorText((raw as any).markdown);
-    } else {
-      setEditorText('');
-    }
+  // 현재 선택된 문서의 initialContent (selectedId 변경 시만 재계산)
+  const currentInitialContent = useMemo(() => {
+    if (!selectedMeeting) return [] as Block[];
+    return parseContentToBlocks(selectedMeeting.content);
+  // selectedId 변경 시만 재계산 (content 변경 시 불필요)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
-  // 자동 저장 (debounce 1.5s)
-  const handleEditorChange = useCallback((text: string) => {
-    setEditorText(text);
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(async () => {
-      if (!selectedId) return;
-      await supabase.from('meetings').update({ content: text }).eq('id', selectedId);
-      optimisticUpdateMeeting(selectedId, { content: text });
-      setSavedAt(new Date());
-    }, 1500);
+  // 자동 저장 콜백
+  const handleBlockSave = useCallback(async (blocks: Block[]) => {
+    if (!selectedId) return;
+    const content = JSON.stringify(blocks);
+    await supabase.from('meetings').update({ content }).eq('id', selectedId);
+    optimisticUpdateMeeting(selectedId, { content });
+    setSavedAt(new Date());
   }, [selectedId, optimisticUpdateMeeting]);
 
   // 메타 업데이트 (제목/이모지/커버)
@@ -422,22 +222,37 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
     if (!selectedId) return;
     setMeetings(prev => prev.map(m => m.id === selectedId ? { ...m, ...patch } : m));
     optimisticUpdateMeeting(selectedId, patch);
-    await supabase.from('meetings').update(patch).eq('id', selectedId);
+    // meetings 테이블은 emoji/cover 컬럼이 없을 수 있으므로 title만 업데이트
+    const safePatch: Record<string, any> = {};
+    if (patch.title !== undefined) safePatch.title = patch.title;
+    if (Object.keys(safePatch).length > 0) {
+      await supabase.from('meetings').update(safePatch).eq('id', selectedId);
+    }
   }, [selectedId, optimisticUpdateMeeting]);
 
-  // 새 문서 생성
+  // 새 문서 생성 — meetings 테이블 스키마 준수 (emoji/cover 제외)
   const handleCreateDoc = async () => {
     if (creating) return;
     setCreating(true);
     const title = newForm.title.trim() || '새 문서';
+
+    // meetings 테이블 기본 스키마 필드만 사용
+    const initialBlocks: Block[] = [
+      {
+        id: Math.random().toString(36).slice(2),
+        type: 'heading',
+        props: { level: 1, textColor: 'default', backgroundColor: 'default', textAlignment: 'left' },
+        content: [{ type: 'text', text: title, styles: {} }],
+        children: [],
+      } as unknown as Block,
+    ];
+
     const payload = {
       category: newForm.category,
       date: new Date().toISOString().split('T')[0],
       title,
       author_id: 'user',
-      content: `# ${title}\n\n내용을 입력하세요...`,
-      emoji: newForm.emoji,
-      cover: newForm.cover,
+      content: JSON.stringify(initialBlocks),
     };
 
     try {
@@ -616,23 +431,25 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
             {/* 커버 */}
             {getMeta(selectedMeeting).cover && (
               <div style={{ height: 140, background: getMeta(selectedMeeting).cover, flexShrink: 0, position: 'relative' }}>
-                <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <button onClick={() => setShowDocCover(p => !p)}
-                    style={{ position: 'absolute', bottom: 10, right: 14, background: 'rgba(0,0,0,0.4)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Image size={11} /> 커버 변경
-                  </button>
-                  {showDocCover && (
-                    <CoverPicker
-                      onSelect={cover => { handleMetaUpdate({ cover }); setShowDocCover(false); }}
-                      onClose={() => setShowDocCover(false)}
-                    />
-                  )}
+                <div style={{ position: 'absolute', bottom: 10, right: 14 }}>
+                  <div style={{ position: 'relative', display: 'inline-block' }}>
+                    <button onClick={() => setShowDocCover(p => !p)}
+                      style={{ background: 'rgba(0,0,0,0.4)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Image size={11} /> 커버 변경
+                    </button>
+                    {showDocCover && (
+                      <CoverPicker
+                        onSelect={cover => { handleMetaUpdate({ cover }); setShowDocCover(false); }}
+                        onClose={() => setShowDocCover(false)}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
             )}
 
             {/* 문서 헤더 */}
-            <div style={{ padding: '18px 48px 0', flexShrink: 0 }}>
+            <div style={{ padding: '18px 32px 0', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, position: 'relative' }}>
                 {/* 이모지 버튼 */}
                 <div style={{ position: 'relative' }}>
@@ -664,17 +481,13 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
                   </div>
                 )}
 
-                {/* 미리보기 / 편집 토글 */}
+                {/* 저장 시간 표시 */}
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
                   {savedAt && (
                     <span style={{ fontSize: 11, color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', gap: 3 }}>
                       <Save size={11} /> {savedAt.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 저장
                     </span>
                   )}
-                  <button onClick={() => setIsPreview(p => !p)}
-                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: isPreview ? 'var(--primary)' : 'var(--secondary)', color: isPreview ? '#fff' : 'var(--foreground)', cursor: 'pointer' }}>
-                    {isPreview ? '✏️ 편집' : '👁 미리보기'}
-                  </button>
                 </div>
               </div>
 
@@ -707,21 +520,14 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
               </div>
             </div>
 
-            {/* 에디터 or 프리뷰 */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 48px 48px' }}>
-              {isPreview ? (
-                <div
-                  style={{ fontSize: 15, lineHeight: 1.75, color: 'var(--foreground)' }}
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(editorText) }}
-                />
-              ) : (
-                <MarkdownEditor
-                  key={selectedId!}
-                  value={editorText}
-                  onChange={handleEditorChange}
-                  docId={selectedId!}
-                />
-              )}
+            {/* BlockNote 에디터 — key={selectedId}로 완전 리마운트 */}
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <BlockNoteEditor
+                key={selectedId}
+                docId={selectedId!}
+                initialContent={currentInitialContent}
+                onSave={handleBlockSave}
+              />
             </div>
           </>
         ) : (
@@ -822,6 +628,8 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
       <style>{`
         .doc-delete-btn { opacity: 0 !important; transition: opacity 0.15s; }
         div:hover > .doc-delete-btn { opacity: 1 !important; }
+        .bn-container { font-family: inherit !important; }
+        .bn-editor { padding: 8px 16px 48px !important; }
       `}</style>
     </div>
   );
