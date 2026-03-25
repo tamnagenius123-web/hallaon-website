@@ -77,23 +77,26 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
           }}
         >
           {/* 로고 이미지 — 어두운 배경이므로 brightness(0) invert(1)로 흰색 처리 */}
+{/* ── 기존의 삐딱했던 모션 블록을 이걸로 덮어쓰세요 ── */}
           <motion.div
             animate={{ y: [0, -10, 0] }}
             transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-            style={{ marginBottom: 32 }}
+            style={{ marginBottom: 32, width: '100%' }} /* 👈 넓이를 꽉 채우게 수정 */
           >
             <img
               src="/logo.png"
               alt="HALLAON"
               style={{
-                width: 'clamp(180px, 55%, 280px)',
+                width: '240px', /* 이상하게 작동하던 비율(clamp) 대신 안정적인 고정 크기로 변경 */
                 height: 'auto',
                 objectFit: 'contain',
                 display: 'block',
+                margin: '0 auto', /* 👈 핵심! 완벽한 가운데 정렬을 만드는 마법의 코드 */
                 filter: 'brightness(0) invert(1) drop-shadow(0 8px 28px rgba(35,131,226,0.45))',
               }}
             />
           </motion.div>
+          {/* ──────────────────────────────────────────────── */}
 
           {/* 타이틀 텍스트 — 로고와 같은 중앙 블록 */}
           <motion.h1
