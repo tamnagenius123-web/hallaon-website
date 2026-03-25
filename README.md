@@ -88,8 +88,8 @@
 ## 환경 변수
 
 ```env
-VITE_SUPABASE_URL=https://pqhkyapghjrfbls.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_w5JSBR3VGRONA_fIUW4XaV
+VITE_SUPABASE_URL=https://pqh.supabase.co
+VITE_SUPABASE_ANON_KEY=sbhable_R3UW4XaV
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}  # 선택
 GOOGLE_DRIVE_FOLDER_ID=...  # 선택
