@@ -26,19 +26,7 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (id.includes('node_modules')) {
-              if (id.includes('@blocknote')) return 'editor';
-              if (id.includes('@fullcalendar')) return 'calendar';
-              if (id.includes('recharts') || id.includes('d3-')) return 'charts';
-              if (id.includes('react-dom')) return 'react-dom';
-              if (id.includes('react')) return 'react';
-            }
-          },
-        },
-      },
+      // 👇 AI가 몰래 넣어둔 rollupOptions 덩어리를 흔적도 없이 날려버렸습니다! 👇
     },
   };
 });
