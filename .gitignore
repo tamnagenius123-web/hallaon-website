@@ -3,3 +3,7 @@ dist/
 .env
 *.log
 .pm2/
+# Node.js crash core dumps
+core
+core.*
+*.core
