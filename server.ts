@@ -50,10 +50,12 @@ async function startServer() {
     }
 
     try {
-      const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+      const folderId = (req.query.folderId as string) || process.env.GOOGLE_DRIVE_FOLDER_ID;
+      const query = folderId && folderId !== 'root' ? `'${folderId}' in parents and trashed = false` : undefined;
       const response = await drive.files.list({
-        q: folderId ? `'${folderId}' in parents` : undefined,
+        q: query,
         fields: "files(id, name, mimeType, webViewLink, iconLink, size, modifiedTime)",
+        orderBy: "folder,name",
       });
       res.json(response.data.files);
     } catch (error: any) {

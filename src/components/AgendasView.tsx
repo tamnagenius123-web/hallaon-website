@@ -5,16 +5,16 @@ import { motion } from 'motion/react';
 import { Plus, CheckCircle2, Clock, User, Tag, Calendar, Trash2, Pencil, X, Check, Search, Send, RefreshCw } from 'lucide-react';
 import { getStatusColor } from './DashboardView';
 import { sendDiscordNotification, formatAgendaForDiscord } from '../lib/discord';
+import { useAppContext } from '../App';
+import { TEAM_OPTIONS as ORG_TEAMS, TEAM_COLORS as ORG_COLORS } from '../lib/orgChart';
 
 interface AgendasViewProps {
   agendas: Agenda[];
 }
 
-const TEAM_OPTIONS = ['PM', 'CD', 'FS', 'DM', 'OPS'];
+const TEAM_OPTIONS = ORG_TEAMS as unknown as string[];
 const STATUS_OPTIONS = ['시작 전', '진행 중', '완료', '보류'];
-const TEAM_COLORS: Record<string, string> = {
-  PM: '#2383E2', CD: '#AE3EC9', FS: '#37B24D', DM: '#F76707', OPS: '#E67700'
-};
+const TEAM_COLORS: Record<string, string> = ORG_COLORS;
 
 interface AgendaForm {
   title: string;
@@ -30,6 +30,7 @@ const defaultForm: AgendaForm = {
 };
 
 export const AgendasView = ({ agendas }: AgendasViewProps) => {
+  const { optimisticUpdateAgenda, optimisticAddAgenda, optimisticDeleteAgenda } = useAppContext();
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<AgendaForm>(defaultForm);
@@ -60,12 +61,21 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
     setSaving(true);
     try {
       if (editId) {
+        optimisticUpdateAgenda(editId, form);
         const { error } = await supabase.from('agendas').update(form).eq('id', editId);
         if (error) throw error;
         showToast('안건이 수정되었습니다.');
       } else {
-        const { error } = await supabase.from('agendas').insert([{ ...form, is_sent: false }]);
-        if (error) throw error;
+        const tempId = `temp-${Date.now()}`;
+        const newAgenda = { id: tempId, ...form, is_sent: false } as Agenda;
+        optimisticAddAgenda(newAgenda);
+        const { data, error } = await supabase.from('agendas').insert([{ ...form, is_sent: false }]).select().single();
+        if (error) {
+          optimisticDeleteAgenda(tempId);
+          throw error;
+        }
+        optimisticDeleteAgenda(tempId);
+        if (data) optimisticAddAgenda(data);
         showToast('새 안건이 등록되었습니다.');
       }
       setShowForm(false);
@@ -94,12 +104,12 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
   const handleDelete = async (id: string) => {
     if (!window.confirm('이 안건을 삭제하시겠습니까?')) return;
     setDeleting(id);
+    optimisticDeleteAgenda(id);
     try {
       const { error } = await supabase.from('agendas').delete().eq('id', id);
       if (error) throw error;
       showToast('안건이 삭제되었습니다.');
     } catch (err) {
-      console.error('삭제 실패:', err);
       showToast('삭제에 실패했습니다.', 'error');
     } finally {
       setDeleting(null);
@@ -107,6 +117,7 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
   };
 
   const handleStatusChange = async (id: string, status: string) => {
+    optimisticUpdateAgenda(id, { status });
     try {
       await supabase.from('agendas').update({ status }).eq('id', id);
     } catch (err) { console.error('상태 변경 실패:', err); }

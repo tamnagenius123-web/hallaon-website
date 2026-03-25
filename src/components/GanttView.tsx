@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import { Task } from '../types';
 import { calculateCriticalPath } from '../lib/pert';
+import { TEAM_OPTIONS as ORG_TEAMS, TEAM_COLORS as ORG_COLORS } from '../lib/orgChart';
 
 interface GanttViewProps {
   tasks: Task[];
 }
 
-const TEAM_COLORS: Record<string, string> = {
-  PM: '#2383E2', CD: '#AE3EC9', FS: '#37B24D', DM: '#F76707', OPS: '#E67700'
-};
-const TEAM_OPTIONS = ['PM', 'CD', 'FS', 'DM', 'OPS'];
+const TEAM_COLORS: Record<string, string> = ORG_COLORS;
+const TEAM_OPTIONS = ORG_TEAMS as unknown as string[];
 
 export const GanttView = ({ tasks: rawTasks }: GanttViewProps) => {
   const [hideCompleted, setHideCompleted] = useState(true);
