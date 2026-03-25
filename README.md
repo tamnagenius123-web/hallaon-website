@@ -6,8 +6,8 @@
 
 - **샌드박스 URL**: https://3000-iiiffmip89qidjz10wzfc-ea026bf9.sandbox.novita.ai
 - **로그인**: 이름(ID) + 비밀번호 입력 (Supabase users 테이블 기반)
-  - 예시: 장민성 / 1234
-
+  - 예시: 홍길동 / 1200
+  
 ## 현재 구현된 기능
 
 ### 핵심 기능
@@ -88,8 +88,8 @@
 ## 환경 변수
 
 ```env
-VITE_SUPABASE_URL=https://pqhkyapgoragihjrfbls.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_wfx3qOFoQf5JSBR3VGRONA_fIUW4XaV
+VITE_SUPABASE_URL=https://pqhkyapghjrfbls.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_w5JSBR3VGRONA_fIUW4XaV
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}  # 선택
 GOOGLE_DRIVE_FOLDER_ID=...  # 선택
