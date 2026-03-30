@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // 👈 useEffect 추가
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { Task, Agenda, Meeting } from '../types';
-import { Plus, X, Check } from 'lucide-react';
+import { Plus, X, Check, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface CalendarViewProps {
@@ -44,6 +44,7 @@ export const CalendarView = ({ tasks, agendas = [], meetings = [] }: CalendarVie
   const [showAgendas, setShowAgendas] = useState(true);
   const [showMeetings, setShowMeetings] = useState(true);
   const [showSchedules, setShowSchedules] = useState(true);
+  
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [scheduleForm, setScheduleForm] = useState<ScheduleForm>({
@@ -52,7 +53,20 @@ export const CalendarView = ({ tasks, agendas = [], meetings = [] }: CalendarVie
     repeat: '없음', color: '#2383E2',
   });
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState(false); // 저장 중 로딩 상태
+
+  // 👇 1. [조회] 화면 켤 때 Supabase에서 기존 일정들 가져오기
+  useEffect(() => {
+    const fetchSchedules = async () => {
+      const { data, error } = await supabase.from('schedules').select('*');
+      if (error) {
+        console.error('일정 불러오기 실패:', error);
+      } else if (data) {
+        setSchedules(data);
+      }
+    };
+    fetchSchedules();
+  }, []);
 
   const events: any[] = [];
 
@@ -148,23 +162,51 @@ export const CalendarView = ({ tasks, agendas = [], meetings = [] }: CalendarVie
     });
   }
 
-  const handleAddSchedule = () => {
-    const newSch: Schedule = {
-      id: Date.now().toString(),
+  // 👇 2. [추가] Supabase에 데이터를 완벽하게 저장(Insert)하기
+  const handleAddSchedule = async () => {
+    if (!scheduleForm.name.trim()) return;
+    setSaving(true);
+
+    const newSch = {
       name: scheduleForm.name,
       start_date: scheduleForm.start_date,
       end_date: scheduleForm.end_date,
-      repeat: scheduleForm.repeat as any,
+      repeat: scheduleForm.repeat,
       color: scheduleForm.color,
       active: true,
     };
-    setSchedules(p => [...p, newSch]);
-    setShowScheduleForm(false);
-    setScheduleForm({ name: '', start_date: new Date().toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0], repeat: '없음', color: '#2383E2' });
+
+    // Supabase 'schedules' 테이블에 Insert
+    const { data, error } = await supabase
+      .from('schedules')
+      .insert([newSch])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('일정 등록 에러:', error);
+      alert('일정 저장에 실패했습니다. (DB 테이블이 있는지 확인하세요)');
+    } else if (data) {
+      // DB 저장 성공 시에만 화면에 추가
+      setSchedules(p => [...p, data]);
+      setShowScheduleForm(false);
+      setScheduleForm({ name: '', start_date: new Date().toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0], repeat: '없음', color: '#2383E2' });
+    }
+    setSaving(false);
   };
 
-  const handleRemoveSchedule = (id: string) => {
-    setSchedules(p => p.filter(s => s.id !== id));
+  // 👇 3. [삭제] Supabase에서 진짜로 삭제(Delete)하기
+  const handleRemoveSchedule = async (id: string) => {
+    if (!window.confirm('이 정기 일정을 삭제하시겠습니까?')) return;
+    
+    const { error } = await supabase.from('schedules').delete().eq('id', id);
+    
+    if (error) {
+      console.error('일정 삭제 에러:', error);
+      alert('일정 삭제에 실패했습니다.');
+    } else {
+      setSchedules(p => p.filter(s => s.id !== id));
+    }
   };
 
   const TOGGLE_FILTERS = [
@@ -259,6 +301,7 @@ export const CalendarView = ({ tasks, agendas = [], meetings = [] }: CalendarVie
               <h3 style={{ fontWeight: 700, fontSize: 15, margin: 0 }}>{selectedEvent.title}</h3>
               <button onClick={() => setSelectedEvent(null)} className="notion-btn-ghost" style={{ padding: 5 }}><X size={14} /></button>
             </div>
+            {/* ... 기존 내용 유지 ... */}
             {selectedEvent.type === 'task' && selectedEvent.data && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
                 <div><span style={{ color: 'var(--muted-foreground)', fontWeight: 600 }}>담당자: </span>{selectedEvent.data.assignee || '-'}</div>
@@ -328,9 +371,10 @@ export const CalendarView = ({ tasks, agendas = [], meetings = [] }: CalendarVie
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowScheduleForm(false)} className="notion-btn-secondary">취소</button>
-              <button onClick={handleAddSchedule} disabled={!scheduleForm.name.trim()} className="notion-btn-primary">
-                <Check size={14} /> 등록
+              <button onClick={() => setShowScheduleForm(false)} className="notion-btn-secondary" disabled={saving}>취소</button>
+              <button onClick={handleAddSchedule} disabled={!scheduleForm.name.trim() || saving} className="notion-btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                {saving ? '저장 중...' : '등록'}
               </button>
             </div>
           </div>
