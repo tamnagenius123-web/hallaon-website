@@ -1,135 +1,113 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useMemo } from 'react';
+import { BlockNoteView } from '@blocknote/react';
+import { BlockNoteEditor, PartialBlock } from '@blocknote/core';
+import { getDefaultReactSlashMenuItems } from '@blocknote/react';
+import '@blocknote/core/fonts/inter.css';
+import '@blocknote/react/style.css';
+import { HardDrive } from 'lucide-react'; // 👈 드라이브 아이콘 추가
 
 interface EditorProps {
   initialContent?: any;
-  onChange?: (content: string) => void;
+  onChange?: (content: any) => void;
 }
 
-// Simple but feature-rich markdown-like editor without heavy dependencies
 export const HanraonEditor = ({ initialContent, onChange }: EditorProps) => {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const getInitialText = () => {
-    if (!initialContent) return '';
-    if (typeof initialContent === 'string') return initialContent;
-    if (Array.isArray(initialContent)) {
-      // Convert BlockNote JSON to plain text
-      const extractText = (blocks: any[]): string => {
-        return blocks.map(block => {
-          if (!block) return '';
-          const type = block.type || 'paragraph';
-          const content = block.content || [];
-          const text = Array.isArray(content) 
-            ? content.map((c: any) => c?.text || '').join('') 
-            : '';
-          
-          switch (type) {
-            case 'heading': return `${'#'.repeat(block.props?.level || 1)} ${text}`;
-            case 'bulletListItem': return `• ${text}`;
-            case 'numberedListItem': return `1. ${text}`;
-            case 'checkListItem': return `${block.props?.checked ? '✅' : '☐'} ${text}`;
-            case 'codeBlock': return `\`\`\`\n${text}\n\`\`\``;
-            default: return text;
-          }
-        }).filter(t => t.trim() !== '').join('\n\n');
-      };
-      return extractText(initialContent);
+  // 에디터 생성
+  const editor = useMemo(() => {
+    // 1. 초기 콘텐츠 파싱 (안전하게)
+    let parsedContent: PartialBlock[] | undefined = undefined;
+    
+    if (initialContent) {
+      if (typeof initialContent === 'string') {
+        try {
+          parsedContent = JSON.parse(initialContent);
+        } catch (e) {
+          // JSON 파싱 실패 시 일반 텍스트 블록으로 변환
+          parsedContent = [
+            {
+              type: "paragraph",
+              content: initialContent,
+            },
+          ];
+        }
+      } else if (Array.isArray(initialContent) && initialContent.length > 0) {
+        parsedContent = initialContent;
+      }
     }
-    return JSON.stringify(initialContent, null, 2);
-  };
 
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.value = getInitialText();
-    }
+    return BlockNoteEditor.create({
+      initialContent: parsedContent,
+    });
   }, [initialContent]);
 
-  const handleChange = () => {
-    if (onChange && textareaRef.current) {
-      onChange(textareaRef.current.value);
-    }
+  // 👇 2. 구글 드라이브 슬래시(/) 커맨드 메뉴 생성 👇
+  const insertDriveFileItem = {
+    name: '구글 드라이브 파일',
+    execute: (editor: BlockNoteEditor) => {
+      // 메뉴 클릭 시 파일 링크를 물어보는 팝업(prompt) 띄우기
+      const fileUrl = window.prompt('구글 드라이브 파일 공유 링크를 입력하세요:');
+      const fileName = window.prompt('파일 이름을 입력하세요 (예: 회의록.pdf):', '드라이브 파일');
+
+      if (fileUrl) {
+        // 현재 커서 위치에 파일 링크 블록(북마크 형태) 삽입
+        editor.insertBlocks(
+          [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'link',
+                  href: fileUrl,
+                  content: `📁 ${fileName || '구글 드라이브 파일'} (클릭하여 열기)`,
+                },
+              ],
+            },
+          ],
+          editor.getTextCursorPosition().block,
+          'after' // 커서 아래에 삽입
+        );
+      }
+    },
+    aliases: ['drive', '구글', '드라이브', '파일'],
+    group: '첨부파일',
+    // 커스텀 메뉴 아이콘 (React 노드)
+    icon: <HardDrive size={18} color="#2383E2" />,
+    hint: '구글 드라이브 링크를 삽입합니다.',
   };
 
-  // Auto-resize
-  const autoResize = () => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const el = e.currentTarget;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const val = el.value;
-
-    // Tab = 2 spaces
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const newVal = val.substring(0, start) + '  ' + val.substring(end);
-      el.value = newVal;
-      el.selectionStart = el.selectionEnd = start + 2;
-      handleChange();
-    }
-  };
+  // 기존 기본 메뉴에 우리가 만든 커스텀 메뉴 추가
+  const customSlashMenuItems = [
+    ...getDefaultReactSlashMenuItems(editor),
+    insertDriveFileItem,
+  ];
 
   return (
-    <div style={{ minHeight: 400, paddingTop: 20 }}>
-      {/* Toolbar hints */}
-      <div style={{ 
-        display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap',
-        fontSize: 11, color: 'var(--muted-foreground)',
-        padding: '6px 10px', background: 'var(--secondary)', borderRadius: 6
-      }}>
-        <span style={{ fontWeight: 600 }}>마크다운 지원:</span>
-        {[
-          { key: '# 제목', label: '제목' },
-          { key: '**굵게**', label: '굵게' },
-          { key: '*기울임*', label: '기울임' },
-          { key: '`코드`', label: '코드' },
-          { key: '- 목록', label: '목록' },
-          { key: '> 인용', label: '인용' },
-          { key: '---', label: '구분선' },
-        ].map(item => (
-          <span key={item.key} style={{
-            background: 'var(--card)', padding: '1px 5px', borderRadius: 3,
-            border: '1px solid var(--border)', fontFamily: 'monospace', cursor: 'pointer',
-          }}
-            onClick={() => {
-              const el = textareaRef.current;
-              if (!el) return;
-              const start = el.selectionStart;
-              const newVal = el.value.substring(0, start) + item.key + el.value.substring(el.selectionEnd);
-              el.value = newVal;
-              el.selectionStart = el.selectionEnd = start + item.key.length;
-              el.focus();
-              handleChange();
-            }}
-          >{item.key}</span>
-        ))}
-      </div>
-
-      <textarea
-        ref={textareaRef}
-        onChange={() => { handleChange(); autoResize(); }}
-        onKeyDown={handleKeyDown}
-        onInput={autoResize}
-        placeholder="여기에 내용을 작성하세요...&#10;&#10;마크다운 문법을 사용할 수 있습니다:&#10;# 큰 제목&#10;## 중간 제목&#10;**굵게** *기울임*&#10;- 목록 항목&#10;1. 번호 목록&#10;> 인용&#10;`인라인 코드`"
-        style={{
-          width: '100%',
-          minHeight: 400,
-          resize: 'vertical',
-          border: 'none',
-          outline: 'none',
-          background: 'transparent',
-          color: 'var(--foreground)',
-          fontSize: 15,
-          lineHeight: 1.8,
-          fontFamily: '"Inter", -apple-system, sans-serif',
-          padding: '8px 0',
+    <div style={{ paddingTop: 20, minHeight: 400 }}>
+      {/* 진짜 노션 스타일의 BlockNote 에디터 렌더링 */}
+      <BlockNoteView
+        editor={editor}
+        onChange={() => {
+          if (onChange) {
+            onChange(JSON.stringify(editor.document));
+          }
         }}
-      />
+        theme="dark" // 화면 테마에 맞게 'dark' 또는 'light'로 변경 가능
+        slashMenu={false} // 기본 메뉴를 끄고 아래에서 커스텀 메뉴를 주입
+      >
+        <div className="bn-slash-menu">
+          {/* 커스텀 슬래시 메뉴 연결 */}
+          <editor.SlashMenu
+            getItems={(query) => {
+              const queryLower = query.toLowerCase();
+              return customSlashMenuItems.filter(
+                (item) =>
+                  item.name.toLowerCase().includes(queryLower) ||
+                  item.aliases?.some((alias) => alias.toLowerCase().includes(queryLower))
+              );
+            }}
+          />
+        </div>
+      </BlockNoteView>
     </div>
   );
 };
