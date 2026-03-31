@@ -6,9 +6,9 @@ import {
   Plus, CheckCircle2, Clock, User, Tag, Calendar, 
   Trash2, Pencil, X, Check, Search, Send, 
   RefreshCw, MoreHorizontal, ChevronRight, Share2,
-  LayoutGrid, List, MessageSquare, History
+  LayoutGrid, List, MessageSquare, History,
+  ClipboardList
 } from 'lucide-react';
-import { getStatusColor } from './DashboardView';
 import { sendDiscordNotification, formatAgendaForDiscord } from '../lib/discord';
 import { useAppContext } from '../App';
 import { TEAM_OPTIONS as ORG_TEAMS, TEAM_COLORS as ORG_COLORS } from '../lib/orgChart';
@@ -21,7 +21,6 @@ interface AgendasViewProps {
 
 const TEAM_OPTIONS = ORG_TEAMS as unknown as string[];
 const STATUS_OPTIONS = ['시작 전', '진행 중', '완료', '보류'];
-const TEAM_COLORS: Record<string, string> = ORG_COLORS;
 
 interface AgendaForm {
   title: string;

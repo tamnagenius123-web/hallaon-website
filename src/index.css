@@ -70,7 +70,7 @@
     
     /* Notion Specific */
     --notion-sidebar: #FBFBFA;
-    --notion-hover: #EBEBEA;
+    --notion-hover: rgba(55, 53, 47, 0.08);
     --notion-text: #37352F;
   }
 
@@ -97,7 +97,7 @@
     
     /* Notion Dark Specific */
     --notion-sidebar: #1A1A1A;
-    --notion-hover: #2A2A2A;
+    --notion-hover: rgba(255, 255, 255, 0.08);
     --notion-text: #D3D3D3;
   }
 }

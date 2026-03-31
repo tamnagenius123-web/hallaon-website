@@ -1,84 +1,86 @@
 import React from 'react';
-import { PresenceUser } from '../types';
-import { RefreshCw } from 'lucide-react';
+import { 
+  ChevronRight, Star, MoreHorizontal, 
+  Share2, MessageSquare, History,
+  Home, BarChart2, ListTodo, LayoutDashboard, Calendar as CalendarIcon,
+  ClipboardList, Scale, BookOpen, HardDrive
+} from 'lucide-react';
+import { cn } from '../lib/utils';
 
 interface HeaderProps {
   activeTab: string;
-  presenceUsers: PresenceUser[];
+  presenceUsers: any[];
   onRefresh?: () => void;
 }
 
-const TAB_CONFIG: Record<string, { title: string; desc: string; emoji: string }> = {
-  home: { title: '홈 · 가이드', desc: 'HALLAON 워크스페이스 가이드', emoji: '🏠' },
-  dashboard: { title: '종합 대시보드', desc: '프로젝트 현황 종합 리포트', emoji: '📊' },
-  tasks: { title: '업무 및 WBS', desc: 'WBS + PERT 기반 일정 관리', emoji: '📋' },
-  gantt: { title: '간트 차트', desc: 'CPM 핵심 경로 시각화', emoji: '📈' },
-  calendar: { title: '종합 캘린더', desc: '모든 일정을 통합하여 확인', emoji: '📅' },
-  agendas: { title: '안건 관리', desc: '팀 안건 등록 및 추적', emoji: '🗂️' },
-  decisions: { title: '의사결정 모델', desc: '가중치 평가로 최적 대안 산출', emoji: '⚖️' },
-  docs: { title: '문서 허브', desc: '회의록 · 팀 문서 작성 및 관리', emoji: '📄' },
-  drive: { title: '구글 드라이브', desc: '공용 드라이브 자료실', emoji: '🗄️' },
+const TAB_CONFIG: Record<string, { label: string, icon: any }> = {
+  home: { label: '홈 · 가이드', icon: Home },
+  dashboard: { label: '대시보드', icon: BarChart2 },
+  tasks: { label: '업무 및 WBS', icon: ListTodo },
+  gantt: { label: '간트 차트', icon: LayoutDashboard },
+  calendar: { label: '캘린더', icon: CalendarIcon },
+  agendas: { label: '안건', icon: ClipboardList },
+  decisions: { label: '의사결정', icon: Scale },
+  docs: { label: '문서 허브', icon: BookOpen },
+  drive: { label: '자료실', icon: HardDrive },
 };
 
-export const Header = ({ activeTab, presenceUsers, onRefresh }: HeaderProps) => {
-  const config = TAB_CONFIG[activeTab] || { title: activeTab, desc: '', emoji: '📌' };
+export const Header = ({ activeTab, presenceUsers }: HeaderProps) => {
+  const currentTab = TAB_CONFIG[activeTab] || { label: 'Workspace', icon: Home };
 
   return (
-    <header style={{ marginBottom: 32, paddingBottom: 20, borderBottom: '1px solid var(--border)' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
-        <div>
-          <div style={{ fontSize: 28, lineHeight: 1, marginBottom: 8 }}>{config.emoji}</div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--foreground)', margin: 0 }}>
-            {config.title}
-          </h1>
-          {config.desc && (
-            <p style={{ color: 'var(--muted-foreground)', fontSize: 14, marginTop: 4 }}>
-              {config.desc}
-            </p>
-          )}
+    <header className="flex items-center justify-between h-11 px-4 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-30 select-none">
+      {/* Left: Breadcrumbs */}
+      <div className="flex items-center gap-1 overflow-hidden">
+        <div className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-[var(--notion-hover)] cursor-pointer text-muted-foreground transition-colors shrink-0">
+          <span className="text-sm font-medium">HALLAON Workspace</span>
         </div>
+        <ChevronRight size={14} className="text-muted-foreground/40 shrink-0" />
+        <div className="flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-[var(--notion-hover)] cursor-pointer transition-colors overflow-hidden">
+          <currentTab.icon size={15} className="text-muted-foreground shrink-0" />
+          <span className="text-sm font-semibold truncate">{currentTab.label}</span>
+        </div>
+      </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, marginTop: 4 }}>
-          {/* Presence */}
-          {presenceUsers.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ display: 'flex' }}>
-                {presenceUsers.slice(0, 4).map((u, i) => (
-                  <div
-                    key={u.user_id + i}
-                    title={u.email}
-                    style={{
-                      width: 28, height: 28, borderRadius: '50%',
-                      background: `hsl(${(u.email?.charCodeAt(0) || 0) * 37 % 360}, 60%, 55%)`,
-                      color: '#fff',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 11, fontWeight: 700,
-                      border: '2px solid var(--background)',
-                      marginLeft: i > 0 ? -8 : 0,
-                      cursor: 'help',
-                    }}
-                  >
-                    {(u.email?.[0] || 'U').toUpperCase()}
-                  </div>
-                ))}
+      {/* Right: Actions & Presence */}
+      <div className="flex items-center gap-1 shrink-0">
+        {/* Presence Users */}
+        {presenceUsers.length > 0 && (
+          <div className="flex -space-x-1.5 mr-3 items-center">
+            {presenceUsers.slice(0, 3).map((u, i) => (
+              <div 
+                key={i} 
+                className="w-6 h-6 rounded-full border-2 border-background bg-primary text-primary-foreground flex items-center justify-center text-[9px] font-bold uppercase"
+                title={u.email}
+              >
+                {u.email?.[0] || 'U'}
               </div>
-              <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
-                {presenceUsers.length}명 접속
-              </span>
-            </div>
-          )}
+            ))}
+            {presenceUsers.length > 3 && (
+              <div className="w-6 h-6 rounded-full border-2 border-background bg-secondary text-muted-foreground flex items-center justify-center text-[9px] font-bold">
+                +{presenceUsers.length - 3}
+              </div>
+            )}
+          </div>
+        )}
 
-          {/* Refresh */}
-          {onRefresh && (
-            <button
-              onClick={onRefresh}
-              className="notion-btn-ghost"
-              style={{ padding: '6px', borderRadius: 6 }}
-              title="새로고침"
-            >
-              <RefreshCw size={15} />
-            </button>
-          )}
+        <div className="flex items-center gap-0.5">
+          <button className="p-1.5 hover:bg-[var(--notion-hover)] rounded-md text-muted-foreground transition-colors" title="공유">
+            <Share2 size={16} />
+          </button>
+          <button className="p-1.5 hover:bg-[var(--notion-hover)] rounded-md text-muted-foreground transition-colors" title="댓글">
+            <MessageSquare size={16} />
+          </button>
+          <button className="p-1.5 hover:bg-[var(--notion-hover)] rounded-md text-muted-foreground transition-colors" title="기록">
+            <History size={16} />
+          </button>
+          <button className="p-1.5 hover:bg-[var(--notion-hover)] rounded-md text-muted-foreground transition-colors" title="즐겨찾기">
+            <Star size={16} />
+          </button>
+          <div className="w-[1px] h-4 bg-border mx-1" />
+          <button className="p-1.5 hover:bg-[var(--notion-hover)] rounded-md text-muted-foreground transition-colors">
+            <MoreHorizontal size={18} />
+          </button>
         </div>
       </div>
     </header>

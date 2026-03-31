@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './lib/supabase';
 import { Task, Agenda, Meeting, Decision, PresenceUser } from './types';
 import { ThemeProvider } from 'next-themes';
@@ -224,50 +224,46 @@ function AppContent() {
 
   return (
     <AppContext.Provider value={contextValue}>
-      <div style={{ display: 'flex', height: '100vh', background: 'var(--background)', overflow: 'hidden' }}>
+      <div className="flex h-screen bg-background overflow-hidden">
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
 
-        <main style={{ flex: 1, overflow: 'auto', padding: '28px 36px' }}>
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
           <Header
             activeTab={activeTab}
             presenceUsers={presenceUsers}
             onRefresh={() => fetchData(false)}
           />
 
-          {loading ? (
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              height: 300, gap: 12, color: 'var(--muted-foreground)',
-            }}>
-              <div style={{
-                width: 20, height: 20, borderRadius: '50%',
-                border: '2px solid var(--border)', borderTopColor: 'var(--primary)',
-                animation: 'spin 1s linear infinite',
-              }} />
-              <span style={{ fontSize: 14 }}>데이터를 불러오는 중...</span>
-            </div>
-          ) : (
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
-              >
-                {activeTab === 'home' && <HomeView onNavigate={setActiveTab} />}
-                {activeTab === 'dashboard' && <DashboardView tasks={tasks} agendas={agendas} />}
-                {activeTab === 'tasks' && <TasksView tasks={tasks} />}
-                {activeTab === 'gantt' && <GanttView tasks={tasks} />}
-                {activeTab === 'docs' && <DocsView meetings={meetings} />}
-                {activeTab === 'drive' && <DriveView />}
-                {activeTab === 'calendar' && <CalendarView tasks={tasks} agendas={agendas} meetings={meetings} />}
-                {activeTab === 'agendas' && <AgendasView agendas={agendas} />}
-                {activeTab === 'decisions' && <DecisionsView decisions={decisions} agendas={agendas} />}
-              </motion.div>
-            </AnimatePresence>
-          )}
-        </main>
+          <main className="flex-1 overflow-auto">
+            {loading ? (
+              <div className="flex flex-col items-center justify-center h-[60vh] gap-4 text-muted-foreground animate-pulse">
+                <div className="w-8 h-8 rounded-full border-2 border-border border-t-primary animate-spin" />
+                <span className="text-sm font-medium">데이터를 불러오는 중...</span>
+              </div>
+            ) : (
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeTab}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  className="h-full"
+                >
+                  {activeTab === 'home' && <HomeView onNavigate={setActiveTab} />}
+                  {activeTab === 'dashboard' && <DashboardView tasks={tasks} agendas={agendas} />}
+                  {activeTab === 'tasks' && <TasksView tasks={tasks} />}
+                  {activeTab === 'gantt' && <GanttView tasks={tasks} />}
+                  {activeTab === 'docs' && <DocsView meetings={meetings} />}
+                  {activeTab === 'drive' && <DriveView />}
+                  {activeTab === 'calendar' && <CalendarView tasks={tasks} agendas={agendas} meetings={meetings} />}
+                  {activeTab === 'agendas' && <AgendasView agendas={agendas} />}
+                  {activeTab === 'decisions' && <DecisionsView decisions={decisions} agendas={agendas} />}
+                </motion.div>
+              </AnimatePresence>
+            )}
+          </main>
+        </div>
       </div>
     </AppContext.Provider>
   );
