@@ -1,8 +1,7 @@
 /**
  * DocsView — BlockNote 기반 문서 허브
  * @blocknote/react BlockNoteView 사용
- * DB content JSON 자동 파싱 + initialContent 주입
- * 👉 우리가 직접 만든 'HanraonEditor' (구글 드라이브 커맨드 포함) 사용!
+ * 👉 PDF 저장(인쇄 모드) 및 구글 드라이브 연동 백업 기능 추가!
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Block } from '@blocknote/core';
@@ -11,11 +10,11 @@ import { supabase } from '../lib/supabase';
 import { useAppContext } from '../App';
 import {
   Plus, Trash2, X, ChevronRight, ChevronDown,
-  Search, BookOpen, Save, Image, Clock,
+  Search, BookOpen, Save, Image, Clock, 
+  Download, CloudUpload, Loader2 // 👈 내보내기용 아이콘 추가
 } from 'lucide-react';
 import { TEAM_OPTIONS as ORG_TEAMS, TEAM_COLORS as ORG_COLORS } from '../lib/orgChart';
 
-// 👇 우리가 정성껏 만든 커스텀 에디터를 불러옵니다! 👇
 import { HanraonEditor } from './Editor'; 
 
 interface DocsViewProps {
@@ -45,7 +44,6 @@ const COVER_GRADIENTS = [
 
 const DOC_EMOJIS = ['📋','📄','📝','📌','📎','📊','📈','💡','🔖','🗒️','📰','📓','📔','📒','📃','🗃️','📑','🔍','✅','⭐'];
 
-// DB content → BlockNote Block[] 변환
 function parseContentToBlocks(raw: any): Block[] {
   if (!raw) return [];
   if (Array.isArray(raw)) {
@@ -81,7 +79,6 @@ function parseContentToBlocks(raw: any): Block[] {
   return [];
 }
 
-// ─── 이모지 선택기 ───────────────────────────────────────────────
 const EmojiPicker = ({ onSelect, onClose }: { onSelect: (e: string) => void; onClose: () => void }) => (
   <div onClick={e => e.stopPropagation()}
     style={{
@@ -102,7 +99,6 @@ const EmojiPicker = ({ onSelect, onClose }: { onSelect: (e: string) => void; onC
   </div>
 );
 
-// ─── 커버 선택기 ────────────────────────────────────────────────
 const CoverPicker = ({ onSelect, onClose }: { onSelect: (g: string) => void; onClose: () => void }) => (
   <div onClick={e => e.stopPropagation()}
     style={{
@@ -125,7 +121,6 @@ const CoverPicker = ({ onSelect, onClose }: { onSelect: (g: string) => void; onC
   </div>
 );
 
-// ─── 메인 DocsView ──────────────────────────────────────────────
 export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
   const { optimisticAddMeeting, optimisticUpdateMeeting, optimisticDeleteMeeting } = useAppContext();
 
@@ -139,10 +134,10 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
   const [showNewForm, setShowNewForm] = useState(false);
   const [newForm, setNewForm] = useState({ title: '새 문서', category: '전체 회의', emoji: '📄', cover: '' });
   const [creating, setCreating] = useState(false);
+  const [exporting, setExporting] = useState(false); // 👈 드라이브 백업 로딩 상태
 
   const [showNewEmoji, setShowNewEmoji] = useState(false);
   const [showNewCover, setShowNewCover] = useState(false);
-
   const [showDocEmoji, setShowDocEmoji] = useState(false);
   const [showDocCover, setShowDocCover] = useState(false);
 
@@ -156,7 +151,6 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
-  // 👇 저장 콜백 (HanraonEditor에서 넘겨주는 JSON 문자열 받기) 👇
   const handleEditorSave = useCallback(async (contentStr: string) => {
     if (!selectedId) return;
     await supabase.from('meetings').update({ content: contentStr }).eq('id', selectedId);
@@ -224,6 +218,54 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
     if (selectedId === id) setSelectedId(null);
   };
 
+  // 👇 문서 내용을 구글 드라이브로 푸시하는 마법의 함수 👇
+  const handlePushToDrive = async () => {
+    if (!selectedMeeting) return;
+    if (!window.confirm(`'${selectedMeeting.title}' 문서를 구글 드라이브에 텍스트 파일로 백업하시겠습니까?`)) return;
+
+    setExporting(true);
+    try {
+      // 1. 문서 안의 텍스트만 쭉 뽑아내기
+      let plainText = `# ${selectedMeeting.title}\n\n`;
+      try {
+        const blocks = JSON.parse(selectedMeeting.content);
+        const extractText = (bks: any[]) => {
+          bks.forEach(b => {
+             if (b.content && Array.isArray(b.content)) {
+               plainText += b.content.map((c:any) => c.text || '').join('') + '\n\n';
+             }
+             if (b.children) extractText(b.children);
+          });
+        };
+        extractText(blocks);
+      } catch(e) {
+        plainText += selectedMeeting.content;
+      }
+
+      // 2. 한글이 깨지지 않게 Base64로 암호화 (우리가 만든 API가 요구하는 형식)
+      const base64String = btoa(unescape(encodeURIComponent(plainText)));
+
+      // 3. 기존에 만든 구글 드라이브 업로드 API로 전송!
+      const res = await fetch('/api/drive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${selectedMeeting.title}.txt`,
+          mimeType: 'text/plain',
+          base64: base64String,
+          folderId: 'root' // 환경변수에 설정된 최상위 폴더로 쏙 들어갑니다!
+        })
+      });
+
+      if (!res.ok) throw new Error('업로드 실패');
+      alert('구글 드라이브에 성공적으로 백업되었습니다! 드라이브 탭에서 확인해 보세요.');
+    } catch (err: any) {
+      alert('드라이브 백업 중 오류가 발생했습니다: ' + err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const filtered = useMemo(() => meetings.filter(m => {
     const matchCat = filterCategory === '전체 회의' || m.category === filterCategory;
     const matchSearch = !search || m.title?.toLowerCase().includes(search.toLowerCase());
@@ -252,15 +294,15 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
   });
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 120px)', overflow: 'hidden' }}>
+    // 👈 print 모드에서 전체화면을 쓸 수 있도록 className 추가
+    <div className="docs-view-wrapper" style={{ display: 'flex', height: 'calc(100vh - 120px)', overflow: 'hidden' }}>
 
       {/* ─── 좌측 사이드바 ─────────────────────────────────────────── */}
-      <div style={{
+      <div className="no-print" style={{ /* 👈 인쇄 시 숨김 처리 */
         width: 255, flexShrink: 0, borderRight: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
         background: 'var(--card)',
       }}>
-        {/* 헤더 */}
         <div style={{ padding: '14px 12px 8px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -287,7 +329,6 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
           </div>
         </div>
 
-        {/* 카테고리 필터 탭 */}
         <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', gap: 3 }}>
           {CATEGORIES.map(cat => (
             <button key={cat} onClick={() => setFilterCategory(cat)}
@@ -303,7 +344,6 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
           ))}
         </div>
 
-        {/* 트리 목록 */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '6px 4px' }}>
           {visibleCats.map(cat => {
             const docs = grouped[cat] ?? [];
@@ -341,8 +381,7 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
                         background: isActive ? 'var(--primary)' : 'transparent',
                         color: isActive ? '#fff' : 'var(--foreground)',
                         transition: 'background 0.12s',
-                        position: 'relative',
-                        zIndex: 1,
+                        position: 'relative', zIndex: 1,
                       }}
                       onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--secondary)'; }}
                       onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
@@ -360,7 +399,7 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
                           color: isActive ? '#fff' : 'var(--muted-foreground)',
                           position: 'relative', zIndex: 10,
                         }}
-                        className="doc-delete-btn"
+                        className="doc-delete-btn no-print"
                         title="삭제"
                       >
                         <Trash2 size={12} />
@@ -368,10 +407,6 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
                     </div>
                   );
                 })}
-
-                {expanded && docs.length === 0 && (
-                  <div style={{ padding: '3px 20px', fontSize: 11, color: 'var(--muted-foreground)', fontStyle: 'italic' }}>문서 없음</div>
-                )}
               </div>
             );
           })}
@@ -379,13 +414,12 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
       </div>
 
       {/* ─── 에디터 영역 ──────────────────────────────────────────── */}
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'var(--background)' }}>
+      <div className="editor-main" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'var(--background)' }}>
         {selectedMeeting ? (
           <>
-            {/* 커버 */}
             {getMeta(selectedMeeting).cover && (
               <div style={{ height: 140, background: getMeta(selectedMeeting).cover, flexShrink: 0, position: 'relative' }}>
-                <div style={{ position: 'absolute', bottom: 10, right: 14 }}>
+                <div className="no-print" style={{ position: 'absolute', bottom: 10, right: 14 }}>
                   <div style={{ position: 'relative', display: 'inline-block' }}>
                     <button onClick={() => setShowDocCover(p => !p)}
                       style={{ background: 'rgba(0,0,0,0.4)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -402,10 +436,8 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
               </div>
             )}
 
-            {/* 문서 헤더 */}
             <div style={{ padding: '18px 32px 0', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, position: 'relative' }}>
-                {/* 이모지 버튼 */}
                 <div style={{ position: 'relative' }}>
                   <button onClick={() => setShowDocEmoji(p => !p)}
                     style={{ fontSize: 30, background: 'none', border: 'none', cursor: 'pointer', padding: 2, lineHeight: 1 }}>
@@ -419,9 +451,8 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
                   )}
                 </div>
 
-                {/* 커버 없을 때 추가 버튼 */}
                 {!getMeta(selectedMeeting).cover && (
-                  <div style={{ position: 'relative' }}>
+                  <div className="no-print" style={{ position: 'relative' }}>
                     <button onClick={() => setShowDocCover(p => !p)}
                       style={{ fontSize: 11, color: 'var(--muted-foreground)', background: 'var(--secondary)', border: 'none', borderRadius: 5, padding: '3px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Image size={11} /> 커버
@@ -435,17 +466,24 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
                   </div>
                 )}
 
-                {/* 저장 시간 표시 */}
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {/* 👇 PDF 다운로드 버튼 (인쇄 기능 활용) 👇 */}
+                  <button onClick={() => window.print()} className="notion-btn-ghost no-print" style={{ padding: '4px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Download size={13} /> PDF 저장
+                  </button>
+                  {/* 👇 드라이브 백업 버튼 👇 */}
+                  <button onClick={handlePushToDrive} disabled={exporting} className="notion-btn-ghost no-print" style={{ padding: '4px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, color: 'var(--primary)' }}>
+                    {exporting ? <Loader2 size={13} className="animate-spin" /> : <CloudUpload size={13} />} 드라이브 백업
+                  </button>
+
                   {savedAt && (
-                    <span style={{ fontSize: 11, color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <span className="no-print" style={{ fontSize: 11, color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', gap: 3 }}>
                       <Save size={11} /> {savedAt.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 저장
                     </span>
                   )}
                 </div>
               </div>
 
-              {/* 제목 인라인 편집 */}
               <input
                 value={selectedMeeting.title}
                 onChange={e => handleMetaUpdate({ title: e.target.value })}
@@ -458,7 +496,6 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
                 placeholder="제목 없음"
               />
 
-              {/* 메타 */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 4 }}>
                 <span style={{
                   fontSize: 10, fontWeight: 600,
@@ -474,17 +511,15 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
               </div>
             </div>
 
-            {/* 👇 하드코딩된 에디터를 지우고 우리가 만든 진짜 에디터(HanraonEditor)를 넣었습니다 👇 */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '0 32px' }}>
               <HanraonEditor
-                key={selectedId} // 문서가 바뀔 때마다 에디터를 초기화
+                key={selectedId}
                 initialContent={currentInitialContent}
-                onChange={handleEditorSave} // 에디터에서 글을 쓰면 이 함수로 저장됨
+                onChange={handleEditorSave}
               />
             </div>
           </>
         ) : (
-          /* 빈 상태 */
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--muted-foreground)' }}>
             <BookOpen size={48} style={{ marginBottom: 16, opacity: 0.25 }} />
             <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 6 }}>문서를 선택하거나 새로 만드세요</div>
@@ -497,26 +532,19 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
         )}
       </div>
 
-      {/* ─── 새 문서 모달 ─────────────────────────────────────────── */}
       {showNewForm && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onClick={() => !creating && setShowNewForm(false)}>
           <div style={{ background: 'var(--card)', borderRadius: 16, padding: 28, width: 400, maxWidth: '90vw', boxShadow: '0 24px 60px rgba(0,0,0,0.25)', border: '1px solid var(--border)' }}
             onClick={e => e.stopPropagation()}>
-
+            {/* ... 기존 새 문서 폼 코드 동일 ... */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>새 문서 만들기</h3>
               <button onClick={() => setShowNewForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)' }}>
                 <X size={18} />
               </button>
             </div>
-
-            {/* 커버 미리보기 */}
-            {newForm.cover && (
-              <div style={{ height: 70, background: newForm.cover, borderRadius: 8, marginBottom: 12 }} />
-            )}
-
-            {/* 이모지 + 커버 버튼 */}
+            {newForm.cover && <div style={{ height: 70, background: newForm.cover, borderRadius: 8, marginBottom: 12 }} />}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14 }}>
               <div style={{ position: 'relative' }}>
                 <button onClick={() => { setShowNewEmoji(p => !p); setShowNewCover(false); }}
@@ -524,10 +552,7 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
                   {newForm.emoji}
                 </button>
                 {showNewEmoji && (
-                  <EmojiPicker
-                    onSelect={emoji => { setNewForm(p => ({ ...p, emoji })); setShowNewEmoji(false); }}
-                    onClose={() => setShowNewEmoji(false)}
-                  />
+                  <EmojiPicker onSelect={emoji => { setNewForm(p => ({ ...p, emoji })); setShowNewEmoji(false); }} onClose={() => setShowNewEmoji(false)} />
                 )}
               </div>
               <div style={{ position: 'relative' }}>
@@ -536,41 +561,23 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
                   <Image size={13} /> 커버
                 </button>
                 {showNewCover && (
-                  <CoverPicker
-                    onSelect={cover => { setNewForm(p => ({ ...p, cover })); setShowNewCover(false); }}
-                    onClose={() => setShowNewCover(false)}
-                  />
+                  <CoverPicker onSelect={cover => { setNewForm(p => ({ ...p, cover })); setShowNewCover(false); }} onClose={() => setShowNewCover(false)} />
                 )}
               </div>
             </div>
-
             <div style={{ marginBottom: 12 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted-foreground)', display: 'block', marginBottom: 5 }}>제목</label>
-              <input
-                value={newForm.title}
-                onChange={e => setNewForm(p => ({ ...p, title: e.target.value }))}
-                placeholder="문서 제목"
-                autoFocus
-                style={{ width: '100%', padding: '9px 12px', background: 'var(--secondary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14, color: 'var(--foreground)', outline: 'none', boxSizing: 'border-box' }}
-                onKeyDown={e => e.key === 'Enter' && handleCreateDoc()}
-              />
+              <input value={newForm.title} onChange={e => setNewForm(p => ({ ...p, title: e.target.value }))} placeholder="문서 제목" autoFocus style={{ width: '100%', padding: '9px 12px', background: 'var(--secondary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14, color: 'var(--foreground)', outline: 'none', boxSizing: 'border-box' }} onKeyDown={e => e.key === 'Enter' && handleCreateDoc()} />
             </div>
-
             <div style={{ marginBottom: 20 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted-foreground)', display: 'block', marginBottom: 5 }}>카테고리</label>
-              <select value={newForm.category} onChange={e => setNewForm(p => ({ ...p, category: e.target.value }))}
-                style={{ width: '100%', padding: '9px 12px', background: 'var(--secondary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14, color: 'var(--foreground)', outline: 'none' }}>
+              <select value={newForm.category} onChange={e => setNewForm(p => ({ ...p, category: e.target.value }))} style={{ width: '100%', padding: '9px 12px', background: 'var(--secondary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14, color: 'var(--foreground)', outline: 'none' }}>
                 {CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
-
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowNewForm(false)} disabled={creating}
-                style={{ padding: '8px 16px', background: 'var(--secondary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer', color: 'var(--foreground)' }}>
-                취소
-              </button>
-              <button onClick={handleCreateDoc} disabled={creating}
-                style={{ padding: '8px 20px', background: creating ? 'var(--border)' : 'var(--primary)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: creating ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={() => setShowNewForm(false)} disabled={creating} style={{ padding: '8px 16px', background: 'var(--secondary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer', color: 'var(--foreground)' }}>취소</button>
+              <button onClick={handleCreateDoc} disabled={creating} style={{ padding: '8px 20px', background: creating ? 'var(--border)' : 'var(--primary)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: creating ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                 {creating ? '생성 중...' : <><Plus size={14} /> 만들기</>}
               </button>
             </div>
@@ -578,11 +585,19 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
         </div>
       )}
 
+      {/* 👇 PDF 인쇄 시 사이드바 및 불필요한 UI를 숨기는 마법의 CSS 👇 */}
       <style>{`
-        /* 삭제 버튼: hover 시만 표시, pointer-events 제어 */
         .doc-item { position: relative; }
         .doc-delete-btn { opacity: 0 !important; transition: opacity 0.15s; pointer-events: none; }
         .doc-item:hover .doc-delete-btn { opacity: 1 !important; pointer-events: auto; }
+        
+        @media print {
+          .no-print, header, nav { display: none !important; }
+          .docs-view-wrapper { height: auto !important; overflow: visible !important; display: block !important; }
+          .editor-main { overflow: visible !important; display: block !important; }
+          body, html { background: white !important; }
+          * { text-shadow: none !important; }
+        }
       `}</style>
     </div>
   );
