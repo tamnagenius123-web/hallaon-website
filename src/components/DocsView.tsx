@@ -357,8 +357,7 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => setShowNewForm(false)} disabled={creating} style={{ padding: '8px 16px', background: 'var(--secondary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer', color: 'var(--foreground)' }}>취소</button>
-              <button onClick={handleCreateDoc} disabled={creating} style={{ padding: '8px 20px', background: creating ? 'var(--border)' : 'var(--primary)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: creating ? 'not-allowed', display: 'flex', alignItems: 'center', gap: 6 }}>{creating ? '생성 중...' : <><Plus size={14} /> 만들기</>}</button>
-            </div>
+              <button onClick={handleCreateDoc} disabled={creating} style={{ padding: '8px 20px', background: creating ? 'var(--border)' : 'var(--primary)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: creating ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>{creating ? '생성 중...' : <><Plus size={14} /> 만들기</>}</button>            </div>
           </div>
         </div>
       )}
