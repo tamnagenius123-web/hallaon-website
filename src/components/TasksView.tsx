@@ -12,9 +12,14 @@ import { useAppContext } from '../App';
 import { TEAM_OPTIONS as ORG_TEAMS, TEAM_COLORS as ORG_COLORS, expandAssignees } from '../lib/orgChart';
 import { HanraonEditor } from './Editor';
 import { formatDate, cn } from '../lib/utils';
+import { sendDiscordNotification, formatTaskForDiscord } from '../lib/discord';
 
 interface TasksViewProps {
   tasks: Task[];
+}
+
+interface TaskWithContent extends Task {
+  content?: string;
 }
 
 const TEAM_OPTIONS = ORG_TEAMS as unknown as string[];
@@ -54,6 +59,7 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [sending, setSending] = useState<string | null>(null);
 
   const tasks = useMemo(() => calculateCriticalPath(initialTasks), [initialTasks]);
 
@@ -135,6 +141,23 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
       showToast('업무가 삭제되었습니다.');
     } catch (err) {
       showToast('삭제에 실패했습니다.', 'error');
+    }
+  };
+
+  const handleDiscordSend = async (task: Task) => {
+    setSending(task.id);
+    try {
+      const message = formatTaskForDiscord(task);
+      const ok = await sendDiscordNotification(message);
+      if (ok) {
+        showToast(`"${task.title}" 디스코드 전송 완료!`);
+      } else {
+        showToast('디스코드 전송 실패.', 'error');
+      }
+    } catch (err) {
+      showToast('전송 중 오류가 발생했습니다.', 'error');
+    } finally {
+      setSending(null);
     }
   };
 
@@ -358,6 +381,15 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  {selectedTask && (
+                    <button 
+                      onClick={() => handleDiscordSend(selectedTask)}
+                      className="p-1.5 hover:bg-secondary rounded-md text-muted-foreground group relative"
+                      title="디스코드 전송"
+                    >
+                      {sending === selectedTask.id ? <RefreshCw size={18} className="animate-spin" /> : <Send size={18} />}
+                    </button>
+                  )}
                   <button 
                     onClick={() => selectedTask && handleDelete(selectedTask.id)}
                     className="p-1.5 hover:bg-red-50 hover:text-red-500 rounded-md text-muted-foreground"

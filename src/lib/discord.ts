@@ -26,6 +26,11 @@ export const formatTaskForDiscord = (task: {
   start_date?: string;
   end_date?: string;
   exp_time?: number;
+  opt_time?: number;
+  prob_time?: number;
+  pess_time?: number;
+  predecessor?: string;
+  content?: string;
 }) => {
   const statusEmoji: Record<string, string> = {
     '완료': '✅', '진행 중': '🔵', '작업 중': '🔵', '막힘': '🔴',
@@ -33,12 +38,35 @@ export const formatTaskForDiscord = (task: {
   };
   const emoji = statusEmoji[task.status] || '⚪';
   
-  return [
+  const lines = [
     `**📋 [업무 전송] ${task.title}**`,
     `> WBS: \`${task.wbs_code || '-'}\` | 담당: ${task.assignee || '-'} | 팀: ${task.team || '-'}`,
     `> 상태: ${emoji} ${task.status} | 기간: ${task.start_date || '-'} ~ ${task.end_date || '-'}`,
-    task.exp_time !== undefined ? `> 기대시간(TE): **${task.exp_time.toFixed(1)}일**` : '',
-  ].filter(Boolean).join('\n');
+  ];
+
+  if (task.exp_time !== undefined) {
+    lines.push(`> 기대시간(TE): **${task.exp_time.toFixed(1)}일**`);
+  }
+
+  if (task.opt_time !== undefined && task.prob_time !== undefined && task.pess_time !== undefined) {
+    lines.push(`> PERT: 낙관 ${task.opt_time}일 | 기대 ${task.prob_time}일 | 비관 ${task.pess_time}일`);
+  }
+
+  if (task.predecessor) {
+    lines.push(`> 선행업무: ${task.predecessor}`);
+  }
+
+  if (task.content) {
+    const contentPreview = task.content
+      .substring(0, 200)
+      .replace(/[*_`~]/g, '')
+      .trim();
+    if (contentPreview) {
+      lines.push(`> 상세내용: ${contentPreview}...`);
+    }
+  }
+
+  return lines.join('\n');
 };
 
 export const formatAgendaForDiscord = (agenda: {
@@ -47,6 +75,7 @@ export const formatAgendaForDiscord = (agenda: {
   team?: string;
   status: string;
   proposed_date?: string;
+  content?: string;
 }) => {
   const statusEmoji: Record<string, string> = {
     '완료': '✅', '진행 중': '🔵', '막힘': '🔴',
@@ -54,9 +83,21 @@ export const formatAgendaForDiscord = (agenda: {
   };
   const emoji = statusEmoji[agenda.status] || '⚪';
   
-  return [
+  const lines = [
     `**🗂️ [안건 전송] ${agenda.title}**`,
     `> 입안자: ${agenda.proposer || '-'} | 팀: ${agenda.team || '-'}`,
     `> 상태: ${emoji} ${agenda.status} | 입안일: ${agenda.proposed_date || '-'}`,
-  ].join('\n');
+  ];
+
+  if (agenda.content) {
+    const contentPreview = agenda.content
+      .substring(0, 200)
+      .replace(/[*_`~]/g, '')
+      .trim();
+    if (contentPreview) {
+      lines.push(`> 상세내용: ${contentPreview}...`);
+    }
+  }
+
+  return lines.join('\n');
 };
