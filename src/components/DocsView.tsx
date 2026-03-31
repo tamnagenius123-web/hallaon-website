@@ -142,7 +142,7 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
 
   const handlePushToDrive = async () => {
     if (!selectedMeeting) return;
-    if (!window.confirm(`'${selectedMeeting.title}' 문서를 구글 드라이브에 텍스트 파일로 백업하시겠습니까?`)) return;
+    if (!window.confirm(`'${selectedMeeting.title}' 문서를 구글 드라이브에 텍스트 파일로 백업하시겠습니까?\n(로봇 계정에 드라이브 '편집자' 권한이 있어야 합니다)`)) return;
 
     setExporting(true);
     try {
@@ -158,13 +158,15 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
         extractText(blocks);
       } catch(e) { plainText += selectedMeeting.content; }
 
+      const base64String = btoa(unescape(encodeURIComponent(plainText)));
+
       const res = await fetch('/api/drive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: `${selectedMeeting.title}.txt`,
           mimeType: 'text/plain',
-          textContent: plainText, // 👈 복잡한 Base64 대신 아주 단순하고 강력하게 텍스트만 보냅니다!
+          base64: base64String,
           folderId: 'root'
         })
       });
@@ -175,7 +177,7 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
       }
       alert('✅ 구글 드라이브에 성공적으로 백업되었습니다!');
     } catch (err: any) {
-      alert('❌ 백업 실패: ' + err.message);
+      alert('❌ 백업 실패: ' + err.message + '\n\n* 구글 드라이브 폴더에 서비스 계정이 "편집자(Editor)"로 초대되어 있는지 확인하세요!');
     } finally {
       setExporting(false);
     }
@@ -326,6 +328,7 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
 
       {showNewForm && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => !creating && setShowNewForm(false)}>
+          {/* 새 문서 폼 UI (생략 없이 그대로 유지) */}
           <div style={{ background: 'var(--card)', borderRadius: 16, padding: 28, width: 400, maxWidth: '90vw', boxShadow: '0 24px 60px rgba(0,0,0,0.25)', border: '1px solid var(--border)' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>새 문서 만들기</h3>
@@ -360,36 +363,37 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
         </div>
       )}
 
-      {/* 👇 🖨️ 세상에서 제일 완벽한 PDF 인쇄 마법 CSS 👇 */}
+      {/* 👇 이번 수정의 핵심: 강력해진 인쇄 CSS와 다크모드 글자색 보정 👇 */}
       <style>{`
         .doc-item { position: relative; }
         .doc-delete-btn { opacity: 0 !important; transition: opacity 0.15s; pointer-events: none; }
         .doc-item:hover .doc-delete-btn { opacity: 1 !important; pointer-events: auto; }
         
+        /* 다크모드 시 제목 글자색을 무조건 흰색으로 강제! */
         .dark .doc-title-input { color: #ffffff !important; }
         
+        /* 🖨️ 세상에서 제일 완벽한 PDF 인쇄 마법 */
         @media print {
           body * {
-            visibility: hidden;
+            visibility: hidden; /* 일단 화면에 있는 모든 걸 숨깁니다 */
           }
           .editor-main, .editor-main * {
-            visibility: visible;
+            visibility: visible; /* 오직 에디터 구역만 보이게 살려냅니다 */
           }
           .editor-main {
             position: absolute;
             left: 0;
             top: 0;
             width: 100%;
-            height: max-content;
-            overflow: visible;
-          }
-          /* 다크모드에서 인쇄하더라도 글자는 전부 검은색으로 고정! */
-          .editor-main * {
-            color: black !important;
+            height: auto !important;
+            overflow: visible !important;
             background: white !important;
+            color: black !important;
           }
+          /* 인쇄할 때는 버튼, 아이콘 같은 찌꺼기들 전부 소각 */
           .no-print, .no-print * {
             display: none !important;
+            visibility: hidden !important;
           }
         }
       `}</style>
