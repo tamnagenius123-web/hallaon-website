@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard, ListTodo, FileText, Calendar as CalendarIcon,
   LogOut, HardDrive, Scale, Sun, Moon, ClipboardList,
   ChevronDown, ChevronRight, Home, BarChart2, BookOpen,
-  ChevronLeft, ChevronRightIcon
+  ChevronLeft, ChevronRightIcon, Plus, Search, Settings,
+  Clock, Trash2, MoreHorizontal
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTheme } from 'next-themes';
 import { supabase } from '../lib/supabase';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface SidebarProps {
   activeTab: string;
@@ -15,7 +17,14 @@ interface SidebarProps {
   onLogout: () => void;
 }
 
-const NAV_GROUPS = [
+interface NavItem {
+  id: string;
+  icon: any;
+  label: string;
+  subItems?: NavItem[];
+}
+
+const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   {
     label: null,
     items: [
@@ -24,35 +33,54 @@ const NAV_GROUPS = [
     ]
   },
   {
-    label: '프로젝트',
+    label: '워크스페이스',
     items: [
-      { id: 'tasks', icon: ListTodo, label: '업무 및 WBS' },
-      { id: 'gantt', icon: LayoutDashboard, label: '간트 차트' },
-      { id: 'calendar', icon: CalendarIcon, label: '캘린더' },
-    ]
-  },
-  {
-    label: '협업',
-    items: [
-      { id: 'agendas', icon: ClipboardList, label: '안건' },
-      { id: 'decisions', icon: Scale, label: '의사결정' },
-      { id: 'docs', icon: BookOpen, label: '문서 허브' },
-      { id: 'drive', icon: HardDrive, label: '자료실' },
+      { 
+        id: 'project-group', 
+        icon: LayoutDashboard, 
+        label: '프로젝트',
+        subItems: [
+          { id: 'tasks', icon: ListTodo, label: '업무 및 WBS' },
+          { id: 'gantt', icon: LayoutDashboard, label: '간트 차트' },
+          { id: 'calendar', icon: CalendarIcon, label: '캘린더' },
+        ]
+      },
+      { 
+        id: 'collab-group', 
+        icon: ClipboardList, 
+        label: '협업',
+        subItems: [
+          { id: 'agendas', icon: ClipboardList, label: '안건' },
+          { id: 'decisions', icon: Scale, label: '의사결정' },
+          { id: 'docs', icon: BookOpen, label: '문서 허브' },
+          { id: 'drive', icon: HardDrive, label: '자료실' },
+        ]
+      }
     ]
   }
 ];
 
 export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => {
   const { theme, setTheme } = useTheme();
+  const [collapsed, setCollapsed] = useState(false);
+  const [isHoveringSidebar, setIsHoveringSidebar] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['project-group', 'collab-group']));
   const [pwExpanded, setPwExpanded] = useState(false);
   const [newPw, setNewPw] = useState('');
   const [newPw2, setNewPw2] = useState('');
   const [pwMsg, setPwMsg] = useState('');
-  const [collapsed, setCollapsed] = useState(false);
 
   const session = JSON.parse(localStorage.getItem('hallaon_session') || '{}');
   const userName = session?.user?.name || '';
   const userRole = session?.user?.role || 'view';
+
+  const toggleGroup = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newSet = new Set(expandedGroups);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setExpandedGroups(newSet);
+  };
 
   const handlePwChange = async () => {
     if (!newPw || newPw !== newPw2) { setPwMsg('비밀번호를 확인하세요.'); return; }
@@ -66,182 +94,179 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => 
   };
 
   return (
-    <aside
-      className="notion-sidebar"
-      style={{
-        width: collapsed ? 52 : 240,
-        transition: 'width 0.2s ease',
-        position: 'relative',
-        flexShrink: 0,
-      }}
+    <div 
+      className="relative h-full flex shrink-0 transition-all duration-300 ease-in-out"
+      style={{ width: collapsed ? 0 : 240 }}
+      onMouseEnter={() => setIsHoveringSidebar(true)}
+      onMouseLeave={() => setIsHoveringSidebar(false)}
     >
-      {/* Logo */}
-      <div style={{ padding: collapsed ? '12px 0 12px' : '12px 8px 12px', marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between' }}>
-        {!collapsed && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: 10,
-              background: '#111111', padding: 6, flexShrink: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
-            }}>
-              <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
-            </div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 13, letterSpacing: '-0.01em', color: 'var(--foreground)' }}>HALLAON</div>
-              <div style={{ fontSize: 9, color: 'var(--muted-foreground)', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Workspace</div>
-            </div>
-          </div>
+      {/* Sidebar Content */}
+      <aside
+        className={cn(
+          "notion-sidebar w-[240px] transition-transform duration-300 ease-in-out",
+          collapsed && "-translate-x-full"
         )}
-        {collapsed && (
-          <div style={{ width: 40, height: 40, borderRadius: 10, background: '#111111', padding: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.18)' }}>
-            <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
-          </div>
-        )}
-        {/* Collapse toggle */}
-        {!collapsed && (
-          <button
-            onClick={() => setCollapsed(true)}
-            style={{ padding: 3, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--muted-foreground)', borderRadius: 4 }}
-            title="사이드바 접기"
+      >
+        {/* User Profile Header */}
+        <div className="p-3 mb-2">
+          <div 
+            className="flex items-center gap-2 p-1.5 rounded-md hover:bg-[var(--notion-hover)] cursor-pointer group"
+            onClick={() => setPwExpanded(!pwExpanded)}
           >
-            <ChevronLeft size={13} />
-          </button>
-        )}
-      </div>
-
-      {/* Collapse expand button (when collapsed) */}
-      {collapsed && (
-        <button
-          onClick={() => setCollapsed(false)}
-          style={{ width: '100%', padding: '6px 0', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--muted-foreground)', display: 'flex', justifyContent: 'center' }}
-          title="사이드바 펼치기"
-        >
-          <ChevronRightIcon size={13} />
-        </button>
-      )}
-
-      {/* Nav */}
-      <nav style={{ flex: 1 }}>
-        {NAV_GROUPS.map((group, gi) => (
-          <div key={gi} style={{ marginBottom: collapsed ? 4 : 12 }}>
-            {group.label && !collapsed && (
-              <div className="sidebar-section-label">{group.label}</div>
-            )}
-            {group.items.map(item => (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={cn('sidebar-item', activeTab === item.id && 'active')}
-                style={{
-                  justifyContent: collapsed ? 'center' : undefined,
-                  padding: collapsed ? '7px 0' : '6px 8px',
-                }}
-                title={collapsed ? item.label : undefined}
-              >
-                <item.icon
-                  size={15}
-                  style={{
-                    flexShrink: 0,
-                    opacity: activeTab === item.id ? 0.85 : 0.5,
-                    color: activeTab === item.id ? 'var(--primary)' : undefined,
-                  }}
-                />
-                {!collapsed && <span>{item.label}</span>}
-              </button>
-            ))}
-          </div>
-        ))}
-      </nav>
-
-      {/* Bottom */}
-      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 8 }}>
-        {/* User */}
-        {!collapsed && (
-          <>
-            <div
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '6px 8px', borderRadius: 6, cursor: 'pointer', marginBottom: 4,
-              }}
-              onClick={() => setPwExpanded(!pwExpanded)}
-              className="hover:bg-[var(--sidebar-hover)]"
-            >
-              <div style={{
-                width: 22, height: 22, borderRadius: '50%',
-                background: 'var(--primary)', color: 'var(--primary-foreground)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 10, fontWeight: 700, flexShrink: 0,
-              }}>
-                {userName?.[0]?.toUpperCase() || 'U'}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName}</div>
-                <div style={{ fontSize: 9, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{userRole}</div>
-              </div>
-              {pwExpanded ? <ChevronDown size={11} style={{ color: 'var(--muted-foreground)', flexShrink: 0 }} /> : <ChevronRight size={11} style={{ color: 'var(--muted-foreground)', flexShrink: 0 }} />}
+            <div className="w-5 h-5 rounded bg-primary text-primary-foreground flex items-center justify-center text-[10px] font-bold uppercase shrink-0">
+              {userName?.[0] || 'U'}
             </div>
-
-            {/* PW Change */}
+            <span className="text-sm font-semibold truncate flex-1">{userName}의 Workspace</span>
+            <ChevronDown size={14} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+          
+          {/* Password Change Dropdown */}
+          <AnimatePresence>
             {pwExpanded && (
-              <div style={{ padding: '8px', background: 'var(--secondary)', borderRadius: 8, marginBottom: 8 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted-foreground)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>비밀번호 변경</div>
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mt-2 p-3 bg-secondary rounded-lg border border-border shadow-sm"
+              >
+                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">비밀번호 변경</div>
                 <input
                   type="password"
                   value={newPw}
                   onChange={e => setNewPw(e.target.value)}
                   placeholder="새 비밀번호"
-                  className="notion-input"
-                  autoComplete="new-password"
-                  style={{ fontSize: 12, padding: '5px 8px', marginBottom: 4 }}
+                  className="notion-input mb-1.5 text-xs h-8"
                 />
                 <input
                   type="password"
                   value={newPw2}
                   onChange={e => setNewPw2(e.target.value)}
-                  placeholder="확인"
-                  className="notion-input"
-                  autoComplete="new-password"
-                  style={{ fontSize: 12, padding: '5px 8px', marginBottom: 6 }}
+                  placeholder="비밀번호 확인"
+                  className="notion-input mb-2 text-xs h-8"
                 />
-                {pwMsg && (
-                  <div style={{ fontSize: 11, color: pwMsg.includes('완료') ? '#37B24D' : '#E03E3E', marginBottom: 6 }}>
-                    {pwMsg}
-                  </div>
-                )}
-                <button onClick={handlePwChange} className="notion-btn-primary w-full justify-center" style={{ fontSize: 11, padding: '4px 8px' }}>
-                  변경
-                </button>
-              </div>
+                {pwMsg && <div className={cn("text-[10px] mb-2 text-center", pwMsg.includes('완료') ? "text-green-500" : "text-red-500")}>{pwMsg}</div>}
+                <button onClick={handlePwChange} className="notion-btn-primary w-full h-7 text-xs">변경하기</button>
+              </motion.div>
             )}
-          </>
-        )}
+          </AnimatePresence>
+        </div>
 
-        {/* Theme toggle */}
-        <button
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="sidebar-item w-full"
-          style={{ justifyContent: collapsed ? 'center' : undefined, padding: collapsed ? '7px 0' : '6px 8px' }}
-          title={collapsed ? (theme === 'dark' ? '라이트 모드' : '다크 모드') : undefined}
-        >
-          {theme === 'dark'
-            ? <Sun size={14} style={{ opacity: 0.5 }} />
-            : <Moon size={14} style={{ opacity: 0.5 }} />
-          }
-          {!collapsed && <span>{theme === 'dark' ? '라이트 모드' : '다크 모드'}</span>}
-        </button>
+        {/* Search & Recent */}
+        <div className="px-2 space-y-0.5 mb-4">
+          <div className="sidebar-item group">
+            <Search size={16} />
+            <span className="flex-1">검색</span>
+            <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100">Ctrl+P</span>
+          </div>
+          <div className="sidebar-item">
+            <Clock size={16} />
+            <span>최근 본 페이지</span>
+          </div>
+          <div className="sidebar-item">
+            <Settings size={16} />
+            <span>설정 및 멤버</span>
+          </div>
+        </div>
 
-        {/* Logout */}
-        <button
-          onClick={onLogout}
-          className="sidebar-item w-full"
-          style={{ justifyContent: collapsed ? 'center' : undefined, padding: collapsed ? '7px 0' : '6px 8px' }}
-          title={collapsed ? '로그아웃' : undefined}
+        {/* Navigation Groups */}
+        <nav className="flex-1 overflow-y-auto px-2 space-y-4">
+          {NAV_GROUPS.map((group, idx) => (
+            <div key={idx}>
+              {group.label && (
+                <div className="px-3 py-1 text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-1">
+                  {group.label}
+                </div>
+              )}
+              <div className="space-y-0.5">
+                {group.items.map((item) => (
+                  <div key={item.id}>
+                    <div
+                      className={cn(
+                        "sidebar-item group relative",
+                        activeTab === item.id && "active bg-[var(--notion-hover)]"
+                      )}
+                      onClick={() => !item.subItems && setActiveTab(item.id)}
+                    >
+                      {item.subItems ? (
+                        <button 
+                          onClick={(e) => toggleGroup(item.id, e)}
+                          className="p-0.5 hover:bg-black/5 dark:hover:bg-white/5 rounded transition-colors"
+                        >
+                          {expandedGroups.has(item.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </button>
+                      ) : (
+                        <item.icon size={16} className="shrink-0" />
+                      )}
+                      {item.subItems && <item.icon size={16} className="shrink-0 ml-1" />}
+                      <span className="flex-1 truncate">{item.label}</span>
+                      <Plus size={14} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+
+                    {/* Sub Items (Tree Structure) */}
+                    <AnimatePresence>
+                      {item.subItems && expandedGroups.has(item.id) && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          {item.subItems.map((sub) => (
+                            <div
+                              key={sub.id}
+                              className={cn(
+                                "sidebar-item pl-9 group",
+                                activeTab === sub.id && "active bg-[var(--notion-hover)]"
+                              )}
+                              onClick={() => setActiveTab(sub.id)}
+                            >
+                              <sub.icon size={14} className="shrink-0 opacity-70" />
+                              <span className="flex-1 truncate">{sub.label}</span>
+                            </div>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        {/* Footer */}
+        <div className="p-2 border-t border-border mt-auto space-y-0.5">
+          <div className="sidebar-item" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            <span>{theme === 'dark' ? '라이트 모드' : '다크 모드'}</span>
+          </div>
+          <div className="sidebar-item text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30" onClick={onLogout}>
+            <LogOut size={16} />
+            <span>로그아웃</span>
+          </div>
+        </div>
+
+        {/* Collapse Button (Inside) */}
+        <button 
+          onClick={() => setCollapsed(true)}
+          className={cn(
+            "absolute right-2 top-4 p-1 rounded hover:bg-[var(--notion-hover)] text-muted-foreground opacity-0 transition-opacity duration-200",
+            isHoveringSidebar && "opacity-100"
+          )}
         >
-          <LogOut size={14} style={{ opacity: 0.5 }} />
-          {!collapsed && <span>로그아웃</span>}
+          <ChevronLeft size={16} />
         </button>
-      </div>
-    </aside>
+      </aside>
+
+      {/* Expand Button (When collapsed) */}
+      {collapsed && (
+        <button
+          onClick={() => setCollapsed(false)}
+          className="fixed left-2 top-4 z-50 p-1.5 bg-background border border-border rounded-md shadow-sm hover:bg-[var(--notion-hover)] text-muted-foreground transition-all duration-200"
+        >
+          <ChevronRightIcon size={18} />
+        </button>
+      )}
+    </div>
   );
 };

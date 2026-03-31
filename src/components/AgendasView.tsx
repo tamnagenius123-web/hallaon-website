@@ -1,12 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Agenda } from '../types';
 import { supabase } from '../lib/supabase';
-import { motion } from 'motion/react';
-import { Plus, CheckCircle2, Clock, User, Tag, Calendar, Trash2, Pencil, X, Check, Search, Send, RefreshCw } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Plus, CheckCircle2, Clock, User, Tag, Calendar, 
+  Trash2, Pencil, X, Check, Search, Send, 
+  RefreshCw, MoreHorizontal, ChevronRight, Share2,
+  LayoutGrid, List, MessageSquare, History
+} from 'lucide-react';
 import { getStatusColor } from './DashboardView';
 import { sendDiscordNotification, formatAgendaForDiscord } from '../lib/discord';
 import { useAppContext } from '../App';
 import { TEAM_OPTIONS as ORG_TEAMS, TEAM_COLORS as ORG_COLORS } from '../lib/orgChart';
+import { HanraonEditor } from './Editor';
+import { formatDate, cn } from '../lib/utils';
 
 interface AgendasViewProps {
   agendas: Agenda[];
@@ -22,22 +29,23 @@ interface AgendaForm {
   team: string;
   status: string;
   proposed_date: string;
+  content?: string;
 }
 
 const defaultForm: AgendaForm = {
   title: '', proposer: '', team: 'PM', status: '시작 전',
   proposed_date: new Date().toISOString().split('T')[0],
+  content: '',
 };
 
 export const AgendasView = ({ agendas }: AgendasViewProps) => {
   const { optimisticUpdateAgenda, optimisticAddAgenda, optimisticDeleteAgenda } = useAppContext();
-  const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
+  const [selectedAgenda, setSelectedAgenda] = useState<Agenda | null>(null);
+  const [showSidePeek, setShowSidePeek] = useState(false);
   const [form, setForm] = useState<AgendaForm>(defaultForm);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
-  const [sentIds, setSentIds] = useState<Set<string>>(new Set());
   const [filterStatus, setFilterStatus] = useState('전체');
   const [filterTeam, setFilterTeam] = useState('전체');
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,49 +64,48 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
     return true;
   }).sort((a, b) => new Date(b.proposed_date).getTime() - new Date(a.proposed_date).getTime());
 
-  const handleSave = async () => {
-    if (!form.title.trim()) return;
-    setSaving(true);
-    try {
-      if (editId) {
-        optimisticUpdateAgenda(editId, form);
-        const { error } = await supabase.from('agendas').update(form).eq('id', editId);
-        if (error) throw error;
-        showToast('안건이 수정되었습니다.');
-      } else {
-        const tempId = `temp-${Date.now()}`;
-        const newAgenda = { id: tempId, ...form, is_sent: false } as Agenda;
-        optimisticAddAgenda(newAgenda);
-        const { data, error } = await supabase.from('agendas').insert([{ ...form, is_sent: false }]).select().single();
-        if (error) {
-          optimisticDeleteAgenda(tempId);
-          throw error;
-        }
-        optimisticDeleteAgenda(tempId);
-        if (data) optimisticAddAgenda(data);
-        showToast('새 안건이 등록되었습니다.');
-      }
-      setShowForm(false);
-      setEditId(null);
-      setForm(defaultForm);
-    } catch (err) {
-      console.error('저장 실패:', err);
-      showToast('저장에 실패했습니다.', 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleEdit = (agenda: Agenda) => {
+  const handleOpenSidePeek = (agenda: Agenda) => {
+    setSelectedAgenda(agenda);
     setForm({
       title: agenda.title || '',
       proposer: agenda.proposer || '',
       team: agenda.team || 'PM',
       status: agenda.status || '시작 전',
       proposed_date: agenda.proposed_date?.split('T')[0] || defaultForm.proposed_date,
+      content: agenda.content || '',
     });
-    setEditId(agenda.id);
-    setShowForm(true);
+    setShowSidePeek(true);
+  };
+
+  const handleCreateNew = () => {
+    setSelectedAgenda(null);
+    setForm(defaultForm);
+    setShowSidePeek(true);
+  };
+
+  const handleSave = async (updatedFields: Partial<AgendaForm>) => {
+    const newForm = { ...form, ...updatedFields };
+    setForm(newForm);
+    
+    if (!newForm.title.trim()) return;
+    
+    try {
+      if (selectedAgenda) {
+        optimisticUpdateAgenda(selectedAgenda.id, newForm);
+        const { error } = await supabase.from('agendas').update(newForm).eq('id', selectedAgenda.id);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase.from('agendas').insert([{ ...newForm, is_sent: false }]).select().single();
+        if (error) throw error;
+        if (data) {
+          optimisticAddAgenda(data);
+          setSelectedAgenda(data);
+        }
+      }
+    } catch (err) {
+      console.error('저장 실패:', err);
+      showToast('저장에 실패했습니다.', 'error');
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -108,19 +115,13 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
     try {
       const { error } = await supabase.from('agendas').delete().eq('id', id);
       if (error) throw error;
+      setShowSidePeek(false);
       showToast('안건이 삭제되었습니다.');
     } catch (err) {
       showToast('삭제에 실패했습니다.', 'error');
     } finally {
       setDeleting(null);
     }
-  };
-
-  const handleStatusChange = async (id: string, status: string) => {
-    optimisticUpdateAgenda(id, { status });
-    try {
-      await supabase.from('agendas').update({ status }).eq('id', id);
-    } catch (err) { console.error('상태 변경 실패:', err); }
   };
 
   const handleDiscordSend = async (agenda: Agenda) => {
@@ -130,10 +131,9 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
       const ok = await sendDiscordNotification(message);
       if (ok) {
         await supabase.from('agendas').update({ is_sent: true }).eq('id', agenda.id);
-        setSentIds(p => new Set([...p, agenda.id]));
         showToast(`"${agenda.title}" 디스코드 전송 완료!`);
       } else {
-        showToast('디스코드 전송 실패. Webhook URL을 확인하세요.', 'error');
+        showToast('디스코드 전송 실패.', 'error');
       }
     } catch (err) {
       showToast('전송 중 오류가 발생했습니다.', 'error');
@@ -143,298 +143,313 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
   };
 
   return (
-    <div className="animate-fade-in space-y-5">
+    <div className="animate-fade-in space-y-6 max-w-[1200px] mx-auto px-4 py-8">
       {/* Toast */}
-      {notification && (
-        <div style={{
-          position: 'fixed', top: 20, right: 20, zIndex: 100,
-          padding: '10px 16px', borderRadius: 8,
-          background: notification.type === 'success' ? 'rgba(55,178,77,0.12)' : 'rgba(224,62,62,0.12)',
-          border: `1px solid ${notification.type === 'success' ? 'rgba(55,178,77,0.3)' : 'rgba(224,62,62,0.3)'}`,
-          color: notification.type === 'success' ? '#37B24D' : '#E03E3E',
-          fontSize: 13, fontWeight: 500,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        }}>
-          {notification.type === 'success' ? '✓ ' : '✕ '}{notification.msg}
-        </div>
-      )}
+      <AnimatePresence>
+        {notification && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className={cn(
+              "fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-lg shadow-xl border text-sm font-medium",
+              notification.type === 'success' ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-700"
+            )}
+          >
+            {notification.msg}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Top controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 160 }}>
-          <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-foreground)', pointerEvents: 'none' }} />
-          <input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="안건명으로 검색..."
-            className="notion-input"
-            style={{ paddingLeft: 30 }}
-          />
+      {/* Header Section */}
+      <div className="flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600">
+              <ClipboardList size={24} />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">안건</h1>
+              <p className="text-sm text-muted-foreground">회의 안건을 제안하고 논의 과정을 기록합니다.</p>
+            </div>
+          </div>
+          <button className="notion-btn-primary gap-2" onClick={handleCreateNew}>
+            <Plus size={18} /> 새 안건
+          </button>
         </div>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="notion-select" style={{ width: 110 }}>
-          <option>전체</option>
-          {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
-        </select>
-        <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className="notion-select" style={{ width: 100 }}>
-          <option>전체</option>
-          {TEAM_OPTIONS.map(t => <option key={t}>{t}</option>)}
-        </select>
 
-        {/* View mode toggle */}
-        <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
-          {(['card', 'table'] as const).map(mode => (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              style={{
-                padding: '5px 10px', fontSize: 12, border: 'none', cursor: 'pointer', fontWeight: 500,
-                background: viewMode === mode ? 'var(--primary)' : 'transparent',
-                color: viewMode === mode ? '#fff' : 'var(--muted-foreground)',
-              }}
-            >
-              {mode === 'card' ? '카드' : '목록'}
-            </button>
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: '전체 안건', value: agendas.length, color: 'text-gray-600' },
+            { label: '진행 중', value: agendas.filter(a => a.status === '진행 중').length, color: 'text-blue-600' },
+            { label: '완료된 안건', value: agendas.filter(a => a.status === '완료').length, color: 'text-green-600' },
+            { label: '보류됨', value: agendas.filter(a => a.status === '보류').length, color: 'text-orange-600' },
+          ].map((m, i) => (
+            <div key={i} className="metric-card">
+              <div className="metric-label">{m.label}</div>
+              <div className={cn("metric-value", m.color)}>{m.value}</div>
+            </div>
           ))}
         </div>
 
-        <button className="notion-btn-primary" onClick={() => { setForm(defaultForm); setEditId(null); setShowForm(true); }}>
-          <Plus size={15} /> 새 안건
-        </button>
-      </div>
-
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-        {[
-          { label: '전체', value: agendas.length },
-          { label: '진행 중', value: agendas.filter(a => a.status === '진행 중').length },
-          { label: '보류', value: agendas.filter(a => a.status === '보류').length },
-          { label: '완료', value: agendas.filter(a => a.status === '완료').length },
-        ].map((m, i) => (
-          <div key={i} className="metric-card" style={{ padding: '12px 16px' }}>
-            <div className="metric-label">{m.label}</div>
-            <div className="metric-value" style={{ fontSize: '1.5rem' }}>{m.value}</div>
+        {/* Filters & View Toggle */}
+        <div className="flex flex-wrap items-center justify-between gap-4 py-2 border-y border-border">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative w-64">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="안건 검색..."
+                className="notion-input pl-9 h-8 text-xs"
+              />
+            </div>
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="notion-select w-28 h-8 text-xs">
+              <option>전체 상태</option>
+              {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
+            </select>
+            <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className="notion-select w-28 h-8 text-xs">
+              <option>전체 팀</option>
+              {TEAM_OPTIONS.map(t => <option key={t}>{t}</option>)}
+            </select>
           </div>
-        ))}
-      </div>
 
-      {/* Form Modal */}
-      {showForm && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowForm(false); }}>
-          <div className="modal-container" style={{ maxWidth: 480 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-              <h3 style={{ fontWeight: 700, fontSize: 16, margin: 0 }}>{editId ? '안건 수정' : '새 안건 제안'}</h3>
-              <button onClick={() => setShowForm(false)} className="notion-btn-ghost" style={{ padding: 5 }}><X size={16} /></button>
-            </div>
-
-            <div style={{ display: 'grid', gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted-foreground)', display: 'block', marginBottom: 4 }}>안건명 *</label>
-                <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="안건명을 입력하세요" className="notion-input" autoFocus />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted-foreground)', display: 'block', marginBottom: 4 }}>입안자</label>
-                  <input value={form.proposer} onChange={e => setForm(p => ({ ...p, proposer: e.target.value }))} placeholder="입안자 이름" className="notion-input" />
-                </div>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted-foreground)', display: 'block', marginBottom: 4 }}>팀</label>
-                  <select value={form.team} onChange={e => setForm(p => ({ ...p, team: e.target.value }))} className="notion-select">
-                    {TEAM_OPTIONS.map(t => <option key={t}>{t}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted-foreground)', display: 'block', marginBottom: 4 }}>상태</label>
-                  <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} className="notion-select">
-                    {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted-foreground)', display: 'block', marginBottom: 4 }}>입안일</label>
-                  <input type="date" value={form.proposed_date} onChange={e => setForm(p => ({ ...p, proposed_date: e.target.value }))} className="notion-input" />
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, marginTop: 18, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowForm(false)} className="notion-btn-secondary">취소</button>
-              <button onClick={handleSave} disabled={saving || !form.title.trim()} className="notion-btn-primary">
-                {saving ? '저장 중...' : <><Check size={14} /> 저장</>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Content */}
-      {filtered.length === 0 ? (
-        <div className="notion-card p-12" style={{ textAlign: 'center', color: 'var(--muted-foreground)' }}>
-          <Clock size={36} style={{ opacity: 0.2, margin: '0 auto 12px' }} />
-          <div style={{ fontSize: 13 }}>등록된 안건이 없습니다</div>
-          <button className="notion-btn-primary" style={{ marginTop: 12 }} onClick={() => { setForm(defaultForm); setEditId(null); setShowForm(true); }}>
-            <Plus size={14} /> 새 안건 등록
-          </button>
-        </div>
-      ) : viewMode === 'card' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-          {filtered.map(agenda => (
-            <motion.div
-              key={agenda.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="notion-card"
-              style={{ padding: 16, position: 'relative' }}
+          <div className="flex items-center bg-secondary rounded-md p-1 gap-1">
+            <button 
+              onClick={() => setViewMode('card')}
+              className={cn("p-1.5 rounded transition-colors", viewMode === 'card' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span style={{
-                  fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
-                  background: `${getStatusColor(agenda.status)}15`,
-                  color: getStatusColor(agenda.status),
-                }}>
+              <LayoutGrid size={16} />
+            </button>
+            <button 
+              onClick={() => setViewMode('table')}
+              className={cn("p-1.5 rounded transition-colors", viewMode === 'table' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+            >
+              <List size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      {viewMode === 'card' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((agenda) => (
+            <motion.div
+              layoutId={agenda.id}
+              key={agenda.id}
+              onClick={() => handleOpenSidePeek(agenda)}
+              className="notion-card p-4 cursor-pointer group flex flex-col gap-3"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="font-semibold text-base group-hover:text-primary transition-colors line-clamp-2">
+                  {agenda.title}
+                </h3>
+                <span className={cn(
+                  "notion-badge shrink-0",
+                  agenda.status === '완료' ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
+                  agenda.status === '진행 중' ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" :
+                  agenda.status === '보류' ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" :
+                  "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
+                )}>
                   {agenda.status}
                 </span>
-                <div style={{ display: 'flex', gap: 2 }}>
-                  <button
-                    onClick={() => handleDiscordSend(agenda)}
-                    disabled={sending === agenda.id}
-                    style={{
-                      padding: 4, borderRadius: 4, border: 'none', background: 'transparent', cursor: 'pointer',
-                      color: sentIds.has(agenda.id) || agenda.is_sent ? '#37B24D' : 'var(--muted-foreground)',
-                    }}
-                    title="디스코드 전송"
-                  >
-                    {sending === agenda.id
-                      ? <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} />
-                      : <Send size={12} />
-                    }
-                  </button>
-                  <button onClick={() => handleEdit(agenda)} style={{ padding: 4, borderRadius: 4, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)' }} title="수정">
-                    <Pencil size={12} />
-                  </button>
-                  <button onClick={() => handleDelete(agenda.id)} disabled={deleting === agenda.id} style={{ padding: 4, borderRadius: 4, border: 'none', background: 'transparent', cursor: 'pointer', color: '#E03E3E' }} title="삭제">
-                    <Trash2 size={12} />
-                  </button>
-                </div>
               </div>
-
-              <h3 style={{
-                fontSize: 14, fontWeight: 600, marginBottom: 12, lineHeight: 1.4,
-                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-              }}>
-                {agenda.title}
-              </h3>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12, color: 'var(--muted-foreground)', borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <User size={11} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                  <span>{agenda.proposer || '-'}</span>
+              
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground mt-auto">
+                <div className="flex items-center gap-1">
+                  <User size={12} />
+                  <span>{agenda.proposer || '미지정'}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Tag size={11} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                  <span style={{
-                    fontSize: 10, fontWeight: 600,
-                    background: `${TEAM_COLORS[agenda.team] || '#868E96'}15`,
-                    color: TEAM_COLORS[agenda.team] || '#868E96',
-                    padding: '1px 5px', borderRadius: 3,
-                  }}>
-                    {agenda.team}
-                  </span>
+                <div className="flex items-center gap-1">
+                  <Tag size={12} />
+                  <span>{agenda.team}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Calendar size={11} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                  <span>{agenda.proposed_date?.split('T')[0] || '-'}</span>
+                <div className="flex items-center gap-1">
+                  <Calendar size={12} />
+                  <span>{formatDate(agenda.proposed_date)}</span>
                 </div>
-              </div>
-
-              {/* Status quick change */}
-              <div style={{ display: 'flex', gap: 4, marginTop: 10 }}>
-                {STATUS_OPTIONS.filter(s => s !== agenda.status).slice(0, 2).map(s => (
-                  <button
-                    key={s}
-                    onClick={() => handleStatusChange(agenda.id, s)}
-                    style={{
-                      flex: 1, fontSize: 10, fontWeight: 600, padding: '4px 6px', borderRadius: 5,
-                      border: '1px solid var(--border)', cursor: 'pointer',
-                      background: 'var(--secondary)',
-                      color: getStatusColor(s),
-                    }}
-                  >
-                    → {s}
-                  </button>
-                ))}
               </div>
             </motion.div>
           ))}
         </div>
       ) : (
-        /* Table view */
-        <div className="notion-card" style={{ overflow: 'hidden' }}>
-          <table className="notion-table">
-            <thead>
+        <div className="notion-card overflow-hidden">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-secondary/50 text-muted-foreground text-[11px] uppercase tracking-wider font-bold">
               <tr>
-                <th>안건명</th>
-                <th>입안자</th>
-                <th>팀</th>
-                <th>상태</th>
-                <th>입안일</th>
-                <th></th>
+                <th className="px-4 py-3 font-semibold">안건명</th>
+                <th className="px-4 py-3 font-semibold">상태</th>
+                <th className="px-4 py-3 font-semibold">입안자</th>
+                <th className="px-4 py-3 font-semibold">팀</th>
+                <th className="px-4 py-3 font-semibold">날짜</th>
               </tr>
             </thead>
-            <tbody>
-              {filtered.map(agenda => (
-                <tr key={agenda.id}>
-                  <td style={{ fontWeight: 500 }}>{agenda.title}</td>
-                  <td style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>{agenda.proposer || '-'}</td>
-                  <td>
-                    <span style={{
-                      fontSize: 11, fontWeight: 600,
-                      background: `${TEAM_COLORS[agenda.team] || '#868E96'}15`,
-                      color: TEAM_COLORS[agenda.team] || '#868E96',
-                      padding: '2px 7px', borderRadius: 4,
-                    }}>
-                      {agenda.team}
+            <tbody className="divide-y divide-border">
+              {filtered.map((agenda) => (
+                <tr 
+                  key={agenda.id} 
+                  onClick={() => handleOpenSidePeek(agenda)}
+                  className="hover:bg-secondary/30 cursor-pointer transition-colors"
+                >
+                  <td className="px-4 py-3 font-medium">{agenda.title}</td>
+                  <td className="px-4 py-3">
+                    <span className={cn(
+                      "notion-badge",
+                      agenda.status === '완료' ? "bg-green-100 text-green-700 dark:bg-green-900/30" :
+                      agenda.status === '진행 중' ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30" :
+                      "bg-gray-100 text-gray-700 dark:bg-gray-800"
+                    )}>
+                      {agenda.status}
                     </span>
                   </td>
-                  <td>
-                    <select
-                      value={agenda.status}
-                      onChange={e => handleStatusChange(agenda.id, e.target.value)}
-                      style={{
-                        fontSize: 11, fontWeight: 600, border: 'none', outline: 'none',
-                        background: `${getStatusColor(agenda.status)}15`,
-                        color: getStatusColor(agenda.status),
-                        padding: '3px 6px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
-                      }}
-                    >
-                      {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
-                    </select>
-                  </td>
-                  <td style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{agenda.proposed_date?.split('T')[0] || '-'}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 3 }}>
-                      <button
-                        onClick={() => handleDiscordSend(agenda)}
-                        disabled={sending === agenda.id}
-                        style={{ padding: 5, borderRadius: 5, border: 'none', background: 'transparent', cursor: 'pointer', color: sentIds.has(agenda.id) || agenda.is_sent ? '#37B24D' : 'var(--muted-foreground)' }}
-                        title="디스코드 전송"
-                      >
-                        <Send size={12} />
-                      </button>
-                      <button onClick={() => handleEdit(agenda)} style={{ padding: 5, borderRadius: 5, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)' }} title="수정">
-                        <Pencil size={12} />
-                      </button>
-                      <button onClick={() => handleDelete(agenda.id)} disabled={deleting === agenda.id} style={{ padding: 5, borderRadius: 5, border: 'none', background: 'transparent', cursor: 'pointer', color: '#E03E3E' }} title="삭제">
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{agenda.proposer}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{agenda.team}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{formatDate(agenda.proposed_date)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      {/* Side Peek Panel */}
+      <AnimatePresence>
+        {showSidePeek && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowSidePeek(false)}
+              className="side-peek-overlay"
+            />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="side-peek-content flex flex-col"
+            >
+              {/* Side Peek Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-background/80 backdrop-blur-md z-10">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setShowSidePeek(false)} className="p-1.5 hover:bg-secondary rounded-md text-muted-foreground">
+                    <ChevronRight size={20} />
+                  </button>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <ClipboardList size={14} />
+                    <span>안건</span>
+                    <span>/</span>
+                    <span className="text-foreground font-medium truncate max-w-[150px]">{form.title || '제목 없음'}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  {selectedAgenda && (
+                    <button 
+                      onClick={() => handleDiscordSend(selectedAgenda)}
+                      className="p-1.5 hover:bg-secondary rounded-md text-muted-foreground group relative"
+                      title="디스코드 전송"
+                    >
+                      {sending === selectedAgenda.id ? <RefreshCw size={18} className="animate-spin" /> : <Send size={18} />}
+                    </button>
+                  )}
+                  <button className="p-1.5 hover:bg-secondary rounded-md text-muted-foreground">
+                    <Share2 size={18} />
+                  </button>
+                  <button 
+                    onClick={() => selectedAgenda && handleDelete(selectedAgenda.id)}
+                    className="p-1.5 hover:bg-red-50 hover:text-red-500 rounded-md text-muted-foreground"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                  <button onClick={() => setShowSidePeek(false)} className="p-1.5 hover:bg-secondary rounded-md text-muted-foreground ml-2">
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Side Peek Content */}
+              <div className="flex-1 overflow-y-auto px-12 py-10 space-y-8">
+                {/* Title */}
+                <textarea
+                  value={form.title}
+                  onChange={e => handleSave({ title: e.target.value })}
+                  placeholder="제목 없음"
+                  rows={1}
+                  className="w-full text-4xl font-bold bg-transparent border-none outline-none resize-none placeholder:text-gray-200"
+                  onInput={(e) => {
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = 'auto';
+                    target.style.height = `${target.scrollHeight}px`;
+                  }}
+                />
+
+                {/* Properties Grid */}
+                <div className="grid grid-cols-[140px_1fr] gap-y-3 text-sm">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Clock size={16} />
+                    <span>상태</span>
+                  </div>
+                  <div>
+                    <select 
+                      value={form.status} 
+                      onChange={e => handleSave({ status: e.target.value })}
+                      className="px-2 py-1 rounded hover:bg-secondary transition-colors outline-none cursor-pointer font-medium"
+                    >
+                      {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <User size={16} />
+                    <span>입안자</span>
+                  </div>
+                  <input
+                    value={form.proposer}
+                    onChange={e => handleSave({ proposer: e.target.value })}
+                    placeholder="입안자 입력"
+                    className="px-2 py-1 bg-transparent hover:bg-secondary rounded transition-colors outline-none"
+                  />
+
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Tag size={16} />
+                    <span>팀</span>
+                  </div>
+                  <div>
+                    <select 
+                      value={form.team} 
+                      onChange={e => handleSave({ team: e.target.value })}
+                      className="px-2 py-1 rounded hover:bg-secondary transition-colors outline-none cursor-pointer"
+                    >
+                      {TEAM_OPTIONS.map(t => <option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Calendar size={16} />
+                    <span>날짜</span>
+                  </div>
+                  <input
+                    type="date"
+                    value={form.proposed_date}
+                    onChange={e => handleSave({ proposed_date: e.target.value })}
+                    className="px-2 py-1 bg-transparent hover:bg-secondary rounded transition-colors outline-none cursor-pointer"
+                  />
+                </div>
+
+                <div className="border-t border-border pt-8">
+                  <HanraonEditor 
+                    initialContent={form.content} 
+                    onChange={(content) => handleSave({ content })}
+                  />
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

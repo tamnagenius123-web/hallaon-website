@@ -4,7 +4,12 @@ import { BlockNoteView } from '@blocknote/mantine';
 import { SuggestionMenuController, getDefaultReactSlashMenuItems } from '@blocknote/react';
 import '@blocknote/mantine/style.css';
 import type { Block } from '@blocknote/core';
-import { HardDrive } from 'lucide-react';
+import { 
+  HardDrive, Type, Heading1, Heading2, Heading3, 
+  List, ListOrdered, CheckSquare, Quote, 
+  Image as ImageIcon, Code, Minus, Table
+} from 'lucide-react';
+import { cn } from '../lib/utils';
 
 interface EditorProps {
   initialContent?: any;
@@ -32,6 +37,25 @@ function parseContentToBlocks(raw: any): Block[] | undefined {
   return undefined;
 }
 
+// 슬래시 메뉴 아이콘 매핑
+const getIcon = (title: string) => {
+  switch (title) {
+    case 'Text': return <Type size={18} />;
+    case 'Heading 1': return <Heading1 size={18} />;
+    case 'Heading 2': return <Heading2 size={18} />;
+    case 'Heading 3': return <Heading3 size={18} />;
+    case 'Bullet List': return <List size={18} />;
+    case 'Numbered List': return <ListOrdered size={18} />;
+    case 'Check List': return <CheckSquare size={18} />;
+    case 'Blockquote': return <Quote size={18} />;
+    case 'Image': return <ImageIcon size={18} />;
+    case 'Code Block': return <Code size={18} />;
+    case 'Divider': return <Minus size={18} />;
+    case 'Table': return <Table size={18} />;
+    default: return <Type size={18} />;
+  }
+};
+
 export const HanraonEditor = ({ initialContent, onChange }: EditorProps) => {
   const parsedContent = useMemo(() => parseContentToBlocks(initialContent), [initialContent]);
 
@@ -39,10 +63,9 @@ export const HanraonEditor = ({ initialContent, onChange }: EditorProps) => {
     initialContent: parsedContent,
   });
 
-  // 👇 최신 BlockNote 문법에 맞게 속성 이름 변경 (title, onItemClick, subtext) 👇
   const insertDriveFileItem = {
-    title: '구글 드라이브 파일', // 👈 name 대신 title
-    onItemClick: () => {         // 👈 execute 대신 onItemClick
+    title: '구글 드라이브 파일',
+    onItemClick: () => {
       const fileUrl = window.prompt('구글 드라이브 파일 공유 링크를 입력하세요:');
       const fileName = window.prompt('파일 이름을 입력하세요 (예: 회의록.pdf):', '드라이브 파일');
 
@@ -66,38 +89,59 @@ export const HanraonEditor = ({ initialContent, onChange }: EditorProps) => {
       }
     },
     aliases: ['drive', '구글', '드라이브', '파일'],
-    group: '첨부파일',
-    icon: <HardDrive size={18} color="#2383E2" />,
-    subtext: '구글 드라이브 링크를 삽입합니다.', // 👈 hint 대신 subtext
+    group: 'Media',
+    icon: <HardDrive size={18} />,
+    subtext: '구글 드라이브 링크를 삽입합니다.',
   };
 
   return (
-    <div style={{ paddingTop: 10, minHeight: 400 }}>
+    <div className="min-h-[500px] w-full max-w-4xl mx-auto">
       <BlockNoteView
         editor={editor}
-        theme="system"
+        theme="light"
         onChange={() => {
           if (onChange) {
             onChange(JSON.stringify(editor.document));
           }
         }}
         slashMenu={false}
+        className="bn-editor"
       >
         <SuggestionMenuController
           triggerCharacter={"/"}
           getItems={async (query) => {
+            const defaultItems = getDefaultReactSlashMenuItems(editor);
             const customMenuItems = [
-              ...getDefaultReactSlashMenuItems(editor),
+              ...defaultItems,
               insertDriveFileItem,
             ];
+            
             const queryLower = query.toLowerCase();
             return customMenuItems.filter(
               (item) =>
-                // 👇 필터링할 때도 name 대신 title을 검색하도록 수정! 👇
                 (item.title && item.title.toLowerCase().includes(queryLower)) ||
                 (item.aliases && item.aliases.some((alias) => alias.toLowerCase().includes(queryLower)))
             );
           }}
+          renderItem={({ item, isSelected, onClick }) => (
+            <div
+              onClick={onClick}
+              className={cn(
+                "bn-slash-menu-item",
+                isSelected && "bg-accent"
+              )}
+            >
+              <div className="bn-slash-menu-item-icon">
+                {item.icon || getIcon(item.title)}
+              </div>
+              <div className="bn-slash-menu-item-text">
+                <span className="bn-slash-menu-item-title">{item.title}</span>
+                {item.subtext && (
+                  <span className="bn-slash-menu-item-subtext">{item.subtext}</span>
+                )}
+              </div>
+            </div>
+          )}
         />
       </BlockNoteView>
     </div>
