@@ -4,7 +4,7 @@ import {
   LogOut, HardDrive, Scale, Sun, Moon, ClipboardList,
   ChevronDown, ChevronRight, Home, BarChart2, BookOpen,
   ChevronLeft, ChevronRightIcon, Plus, Search, Settings,
-  Clock, Trash2, MoreHorizontal
+  Clock, Trash2, MoreHorizontal, Star, X
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTheme } from 'next-themes';
@@ -22,6 +22,13 @@ interface NavItem {
   icon: any;
   label: string;
   subItems?: NavItem[];
+}
+
+interface RecentPage {
+  id: string;
+  tabId: string;
+  label: string;
+  timestamp: number;
 }
 
 const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
@@ -60,6 +67,18 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   }
 ];
 
+const TAB_LABELS: Record<string, string> = {
+  home: '홈 · 가이드',
+  dashboard: '대시보드',
+  tasks: '업무 및 WBS',
+  gantt: '간트 차트',
+  calendar: '캘린더',
+  agendas: '안건',
+  decisions: '의사결정',
+  docs: '문서 허브',
+  drive: '자료실',
+};
+
 export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => {
   const { theme, setTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
@@ -69,10 +88,51 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => 
   const [newPw, setNewPw] = useState('');
   const [newPw2, setNewPw2] = useState('');
   const [pwMsg, setPwMsg] = useState('');
+  const [recentPages, setRecentPages] = useState<RecentPage[]>([]);
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [showRecent, setShowRecent] = useState(false);
 
   const session = JSON.parse(localStorage.getItem('hallaon_session') || '{}');
   const userName = session?.user?.name || '';
-  const userRole = session?.user?.role || 'view';
+
+  // 최근 본 페이지 로직
+  useEffect(() => {
+    const stored = localStorage.getItem('hallaon_recent_pages');
+    if (stored) setRecentPages(JSON.parse(stored));
+    
+    const stored_fav = localStorage.getItem('hallaon_favorites');
+    if (stored_fav) setFavorites(new Set(JSON.parse(stored_fav)));
+  }, []);
+
+  useEffect(() => {
+    if (activeTab && TAB_LABELS[activeTab]) {
+      setRecentPages(prev => {
+        const filtered = prev.filter(p => p.tabId !== activeTab);
+        const newPage: RecentPage = {
+          id: `${activeTab}-${Date.now()}`,
+          tabId: activeTab,
+          label: TAB_LABELS[activeTab],
+          timestamp: Date.now()
+        };
+        const updated = [newPage, ...filtered].slice(0, 5);
+        localStorage.setItem('hallaon_recent_pages', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  }, [activeTab]);
+
+  const toggleFavorite = (tabId: string) => {
+    const newFavs = new Set(favorites);
+    if (newFavs.has(tabId)) newFavs.delete(tabId);
+    else newFavs.add(tabId);
+    setFavorites(newFavs);
+    localStorage.setItem('hallaon_favorites', JSON.stringify(Array.from(newFavs)));
+  };
+
+  const clearRecent = (id: string) => {
+    setRecentPages(prev => prev.filter(p => p.id !== id));
+    localStorage.setItem('hallaon_recent_pages', JSON.stringify(recentPages.filter(p => p.id !== id)));
+  };
 
   const toggleGroup = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -156,16 +216,47 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => 
           <div className="sidebar-item group">
             <Search size={16} />
             <span className="flex-1">검색</span>
-            <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100">Ctrl+P</span>
+            <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100">Ctrl+K</span>
           </div>
-          <div className="sidebar-item">
+          
+          {/* 최근 본 페이지 */}
+          <div 
+            className="sidebar-item group"
+            onClick={() => setShowRecent(!showRecent)}
+          >
             <Clock size={16} />
-            <span>최근 본 페이지</span>
+            <span className="flex-1">최근 본 페이지</span>
+            <ChevronRight size={14} className={cn("text-muted-foreground transition-transform", showRecent && "rotate-90")} />
           </div>
-          <div className="sidebar-item">
-            <Settings size={16} />
-            <span>설정 및 멤버</span>
-          </div>
+
+          {/* Recent Pages Dropdown */}
+          <AnimatePresence>
+            {showRecent && recentPages.length > 0 && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden pl-4 space-y-0.5"
+              >
+                {recentPages.map(page => (
+                  <div
+                    key={page.id}
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs rounded hover:bg-[var(--notion-hover)] cursor-pointer group transition-colors"
+                    onClick={() => setActiveTab(page.tabId)}
+                  >
+                    <Clock size={12} className="text-muted-foreground opacity-60" />
+                    <span className="flex-1 truncate text-muted-foreground">{page.label}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); clearRecent(page.id); }}
+                      className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Navigation Groups */}
@@ -199,7 +290,12 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => 
                       )}
                       {item.subItems && <item.icon size={16} className="shrink-0 ml-1" />}
                       <span className="flex-1 truncate">{item.label}</span>
-                      <Plus size={14} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleFavorite(item.id); }}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Star size={14} className={cn("transition-colors", favorites.has(item.id) ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground")} />
+                      </button>
                     </div>
 
                     {/* Sub Items (Tree Structure) */}
@@ -222,6 +318,12 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => 
                             >
                               <sub.icon size={14} className="shrink-0 opacity-70" />
                               <span className="flex-1 truncate">{sub.label}</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleFavorite(sub.id); }}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <Star size={12} className={cn("transition-colors", favorites.has(sub.id) ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground")} />
+                              </button>
                             </div>
                           ))}
                         </motion.div>

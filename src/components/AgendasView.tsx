@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, CheckCircle2, Clock, User, Tag, Calendar, 
   Trash2, Pencil, X, Check, Search, Send, 
-  RefreshCw, MoreHorizontal, ChevronRight, Share2,
+  RefreshCw, MoreHorizontal, ChevronRight,
   LayoutGrid, List, MessageSquare, History,
   ClipboardList
 } from 'lucide-react';
@@ -354,9 +354,6 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
                       {sending === selectedAgenda.id ? <RefreshCw size={18} className="animate-spin" /> : <Send size={18} />}
                     </button>
                   )}
-                  <button className="p-1.5 hover:bg-secondary rounded-md text-muted-foreground">
-                    <Share2 size={18} />
-                  </button>
                   <button 
                     onClick={() => selectedAgenda && handleDelete(selectedAgenda.id)}
                     className="p-1.5 hover:bg-red-50 hover:text-red-500 rounded-md text-muted-foreground"

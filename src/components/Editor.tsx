@@ -7,7 +7,8 @@ import type { Block } from '@blocknote/core';
 import { 
   HardDrive, Type, Heading1, Heading2, Heading3, 
   List, ListOrdered, CheckSquare, Quote, 
-  Image as ImageIcon, Code, Minus, Table
+  Image as ImageIcon, Code, Minus, Table,
+  Lightbulb, AlertCircle, Info, Zap
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -37,23 +38,20 @@ function parseContentToBlocks(raw: any): Block[] | undefined {
   return undefined;
 }
 
-// 슬래시 메뉴 아이콘 매핑
-const getIcon = (title: string) => {
-  switch (title) {
-    case 'Text': return <Type size={18} />;
-    case 'Heading 1': return <Heading1 size={18} />;
-    case 'Heading 2': return <Heading2 size={18} />;
-    case 'Heading 3': return <Heading3 size={18} />;
-    case 'Bullet List': return <List size={18} />;
-    case 'Numbered List': return <ListOrdered size={18} />;
-    case 'Check List': return <CheckSquare size={18} />;
-    case 'Blockquote': return <Quote size={18} />;
-    case 'Image': return <ImageIcon size={18} />;
-    case 'Code Block': return <Code size={18} />;
-    case 'Divider': return <Minus size={18} />;
-    case 'Table': return <Table size={18} />;
-    default: return <Type size={18} />;
-  }
+// 슬래시 메뉴 아이콘 및 설명 매핑
+const SLASH_MENU_CONFIG: Record<string, { icon: any, subtext: string }> = {
+  'Text': { icon: Type, subtext: '일반 텍스트 단락' },
+  'Heading 1': { icon: Heading1, subtext: '큰 제목' },
+  'Heading 2': { icon: Heading2, subtext: '중간 제목' },
+  'Heading 3': { icon: Heading3, subtext: '작은 제목' },
+  'Bullet List': { icon: List, subtext: '글머리 목록' },
+  'Numbered List': { icon: ListOrdered, subtext: '번호 목록' },
+  'Check List': { icon: CheckSquare, subtext: '체크리스트' },
+  'Blockquote': { icon: Quote, subtext: '인용구' },
+  'Image': { icon: ImageIcon, subtext: '이미지 삽입' },
+  'Code Block': { icon: Code, subtext: '코드 블록' },
+  'Divider': { icon: Minus, subtext: '구분선' },
+  'Table': { icon: Table, subtext: '표 삽입' },
 };
 
 export const HanraonEditor = ({ initialContent, onChange }: EditorProps) => {
@@ -94,6 +92,66 @@ export const HanraonEditor = ({ initialContent, onChange }: EditorProps) => {
     subtext: '구글 드라이브 링크를 삽입합니다.',
   };
 
+  const calloutItems = [
+    {
+      title: '💡 팁',
+      onItemClick: () => {
+        editor.insertBlocks(
+          [
+            {
+              type: 'paragraph',
+              content: '💡 유용한 팁을 입력하세요.',
+            },
+          ],
+          editor.getTextCursorPosition().block,
+          'after'
+        );
+      },
+      aliases: ['팁', 'tip', 'lightbulb'],
+      group: 'Advanced',
+      icon: <Lightbulb size={18} />,
+      subtext: '유용한 팁을 강조합니다.',
+    },
+    {
+      title: '⚠️ 경고',
+      onItemClick: () => {
+        editor.insertBlocks(
+          [
+            {
+              type: 'paragraph',
+              content: '⚠️ 주의할 사항을 입력하세요.',
+            },
+          ],
+          editor.getTextCursorPosition().block,
+          'after'
+        );
+      },
+      aliases: ['경고', 'warning', 'alert'],
+      group: 'Advanced',
+      icon: <AlertCircle size={18} />,
+      subtext: '주의사항을 강조합니다.',
+    },
+    {
+      title: 'ℹ️ 정보',
+      onItemClick: () => {
+        editor.insertBlocks(
+          [
+            {
+              type: 'paragraph',
+              content: 'ℹ️ 중요한 정보를 입력하세요.',
+            },
+          ],
+          editor.getTextCursorPosition().block,
+          'after'
+        );
+      },
+      aliases: ['정보', 'info', 'information'],
+      group: 'Advanced',
+      icon: <Info size={18} />,
+      subtext: '중요한 정보를 강조합니다.',
+    },
+  ];
+
   return (
     <div className="min-h-[500px] w-full max-w-4xl mx-auto">
       <BlockNoteView
@@ -114,6 +172,7 @@ export const HanraonEditor = ({ initialContent, onChange }: EditorProps) => {
             const customMenuItems = [
               ...defaultItems,
               insertDriveFileItem,
+              ...calloutItems,
             ];
             
             const queryLower = query.toLowerCase();
@@ -123,25 +182,27 @@ export const HanraonEditor = ({ initialContent, onChange }: EditorProps) => {
                 (item.aliases && item.aliases.some((alias) => alias.toLowerCase().includes(queryLower)))
             );
           }}
-          renderItem={({ item, isSelected, onClick }) => (
-            <div
-              onClick={onClick}
-              className={cn(
-                "bn-slash-menu-item",
-                isSelected && "bg-accent"
-              )}
-            >
-              <div className="bn-slash-menu-item-icon">
-                {item.icon || getIcon(item.title)}
-              </div>
-              <div className="bn-slash-menu-item-text">
-                <span className="bn-slash-menu-item-title">{item.title}</span>
-                {item.subtext && (
-                  <span className="bn-slash-menu-item-subtext">{item.subtext}</span>
+          renderItem={({ item, isSelected, onClick }) => {
+            const config = SLASH_MENU_CONFIG[item.title] || { icon: Zap, subtext: item.subtext || '' };
+            
+            return (
+              <div
+                onClick={onClick}
+                className={cn(
+                  "bn-slash-menu-item",
+                  isSelected && "bg-accent"
                 )}
+              >
+                <div className="bn-slash-menu-item-icon">
+                  {item.icon || <config.icon size={18} />}
+                </div>
+                <div className="bn-slash-menu-item-text">
+                  <span className="bn-slash-menu-item-title">{item.title}</span>
+                  <span className="bn-slash-menu-item-subtext">{config.subtext || item.subtext || ''}</span>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          }}
         />
       </BlockNoteView>
     </div>

@@ -1,7 +1,6 @@
 import React from 'react';
 import { 
   ChevronRight, Star, MoreHorizontal, 
-  Share2, MessageSquare, History,
   Home, BarChart2, ListTodo, LayoutDashboard, Calendar as CalendarIcon,
   ClipboardList, Scale, BookOpen, HardDrive
 } from 'lucide-react';
@@ -27,6 +26,27 @@ const TAB_CONFIG: Record<string, { label: string, icon: any }> = {
 
 export const Header = ({ activeTab, presenceUsers }: HeaderProps) => {
   const currentTab = TAB_CONFIG[activeTab] || { label: 'Workspace', icon: Home };
+  const [isFavorited, setIsFavorited] = React.useState(false);
+
+  React.useEffect(() => {
+    const stored = localStorage.getItem('hallaon_favorites');
+    if (stored) {
+      const favs = new Set(JSON.parse(stored));
+      setIsFavorited(favs.has(activeTab));
+    }
+  }, [activeTab]);
+
+  const toggleFavorite = () => {
+    const stored = localStorage.getItem('hallaon_favorites');
+    const favs = new Set(stored ? JSON.parse(stored) : []);
+    if (favs.has(activeTab)) {
+      favs.delete(activeTab);
+    } else {
+      favs.add(activeTab);
+    }
+    localStorage.setItem('hallaon_favorites', JSON.stringify(Array.from(favs)));
+    setIsFavorited(!isFavorited);
+  };
 
   return (
     <header className="flex items-center justify-between h-11 px-4 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-30 select-none">
@@ -43,10 +63,10 @@ export const Header = ({ activeTab, presenceUsers }: HeaderProps) => {
       </div>
 
       {/* Right: Actions & Presence */}
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         {/* Presence Users */}
         {presenceUsers.length > 0 && (
-          <div className="flex -space-x-1.5 mr-3 items-center">
+          <div className="flex -space-x-1.5 items-center">
             {presenceUsers.slice(0, 3).map((u, i) => (
               <div 
                 key={i} 
@@ -65,17 +85,12 @@ export const Header = ({ activeTab, presenceUsers }: HeaderProps) => {
         )}
 
         <div className="flex items-center gap-0.5">
-          <button className="p-1.5 hover:bg-[var(--notion-hover)] rounded-md text-muted-foreground transition-colors" title="공유">
-            <Share2 size={16} />
-          </button>
-          <button className="p-1.5 hover:bg-[var(--notion-hover)] rounded-md text-muted-foreground transition-colors" title="댓글">
-            <MessageSquare size={16} />
-          </button>
-          <button className="p-1.5 hover:bg-[var(--notion-hover)] rounded-md text-muted-foreground transition-colors" title="기록">
-            <History size={16} />
-          </button>
-          <button className="p-1.5 hover:bg-[var(--notion-hover)] rounded-md text-muted-foreground transition-colors" title="즐겨찾기">
-            <Star size={16} />
+          <button 
+            onClick={toggleFavorite}
+            className="p-1.5 hover:bg-[var(--notion-hover)] rounded-md text-muted-foreground transition-colors" 
+            title="즐겨찾기"
+          >
+            <Star size={16} className={cn("transition-colors", isFavorited && "fill-yellow-400 text-yellow-400")} />
           </button>
           <div className="w-[1px] h-4 bg-border mx-1" />
           <button className="p-1.5 hover:bg-[var(--notion-hover)] rounded-md text-muted-foreground transition-colors">

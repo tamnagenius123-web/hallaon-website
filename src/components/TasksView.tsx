@@ -5,8 +5,7 @@ import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, ListTodo, CheckCircle2, Clock, User, Tag, Calendar, 
-  Trash2, X, Search, Send, RefreshCw, MoreHorizontal, 
-  ChevronRight, Share2, LayoutGrid, List, AlertCircle,
+  Trash2, X, Search, Send, RefreshCw, MoreHorizontal, ChevronRight, LayoutGrid, List, AlertCircle,
   Flag, ArrowRight, ArrowRightLeft, Table, BarChart2
 } from 'lucide-react';
 import { useAppContext } from '../App';
@@ -359,9 +358,6 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button className="p-1.5 hover:bg-secondary rounded-md text-muted-foreground">
-                    <Share2 size={18} />
-                  </button>
                   <button 
                     onClick={() => selectedTask && handleDelete(selectedTask.id)}
                     className="p-1.5 hover:bg-red-50 hover:text-red-500 rounded-md text-muted-foreground"
