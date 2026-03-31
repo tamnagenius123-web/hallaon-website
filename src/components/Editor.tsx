@@ -75,7 +75,7 @@ export const HanraonEditor = ({ initialContent, onChange }: EditorProps) => {
     <div style={{ paddingTop: 10, minHeight: 400 }}>
       <BlockNoteView
         editor={editor}
-        theme="light"
+        theme="system"
         onChange={() => {
           if (onChange) {
             onChange(JSON.stringify(editor.document));
