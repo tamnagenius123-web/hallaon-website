@@ -1,30 +1,22 @@
 import { google } from 'googleapis';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { Readable } from 'stream';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS 처리
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
     const auth = new google.auth.GoogleAuth({
       credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON!),
-      // 👇 권한을 읽기/쓰기가 모두 가능한 전체 권한으로 올렸습니다!
-      scopes: ['https://www.googleapis.com/auth/drive'],
+      scopes: ['https://www.googleapis.com/auth/drive'], // 👈 전체 권한 유지!
     });
 
     const drive = google.drive({ version: 'v3', auth });
 
-    // ─────────────────────────────────────────────────────────
-    // 1. 파일 목록 불러오기 (GET)
-    // ─────────────────────────────────────────────────────────
     if (req.method === 'GET') {
       const folderId = req.query.folderId as string || process.env.GOOGLE_DRIVE_FOLDER_ID;
       const response = await drive.files.list({
@@ -35,29 +27,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(response.data.files);
     }
 
-    // ─────────────────────────────────────────────────────────
-    // 2. 파일 업로드 하기 (POST)
-    // ─────────────────────────────────────────────────────────
     if (req.method === 'POST') {
-      const { name, mimeType, base64, folderId } = req.body;
+      const { name, mimeType, textContent, base64, folderId } = req.body;
       const targetFolder = folderId === 'root' ? process.env.GOOGLE_DRIVE_FOLDER_ID : folderId;
 
-      // Base64 문자열을 실제 파일(Buffer)로 변환
-      const buffer = Buffer.from(base64, 'base64');
-      const stream = new Readable();
-      stream.push(buffer);
-      stream.push(null);
+      const media: any = { mimeType };
+      
+      // 👇 여기가 핵심입니다! 텍스트면 다이렉트로, 파일이면 스트림으로!
+      if (textContent) {
+        media.body = textContent; 
+      } else if (base64) {
+        const { Readable } = await import('stream');
+        const buffer = Buffer.from(base64, 'base64');
+        const stream = new Readable();
+        stream.push(buffer);
+        stream.push(null);
+        media.body = stream;
+      }
 
-      // 구글 드라이브로 전송
       const response = await drive.files.create({
-        requestBody: {
-          name: name,
-          parents: [targetFolder!], // 현재 보고 있는 폴더에 저장
-        },
-        media: {
-          mimeType: mimeType,
-          body: stream,
-        },
+        requestBody: { name: name, parents: [targetFolder!] },
+        media: media,
         fields: 'id, name, webViewLink',
       });
 
