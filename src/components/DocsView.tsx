@@ -228,7 +228,7 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '6px 4px' }}>
-          {filterCategory === '전체 회의' ? CATEGORIES : [filterCategory].map(cat => {
+          {(filterCategory === '전체 회의' ? CATEGORIES : [filterCategory]).map(cat => {
             const docs = grouped[cat] ?? [];
             if (filterCategory !== '전체 회의' && docs.length === 0) return null;
             const expanded = expandedCategories.has(cat);
