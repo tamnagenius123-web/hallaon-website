@@ -15,6 +15,7 @@ import { TEAM_OPTIONS as ORG_TEAMS, TEAM_COLORS as ORG_COLORS } from '../lib/org
 import { HanraonEditor } from './Editor';
 import { formatDate, cn } from '../lib/utils';
 import { CommentSection } from './CommentSection';
+import { useToast } from './Toast';
 
 interface AgendasViewProps {
   agendas: Agenda[];
@@ -40,6 +41,7 @@ const defaultForm: AgendaForm = {
 
 export const AgendasView = ({ agendas }: AgendasViewProps) => {
   const { optimisticUpdateAgenda, optimisticAddAgenda, optimisticDeleteAgenda } = useAppContext();
+  const { showToast } = useToast();
   const [selectedAgenda, setSelectedAgenda] = useState<Agenda | null>(null);
   const [showSidePeek, setShowSidePeek] = useState(false);
   const [form, setForm] = useState<AgendaForm>(defaultForm);
@@ -50,12 +52,6 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
   const [filterTeam, setFilterTeam] = useState('전체');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
-  const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-
-  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
-    setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 3000);
-  };
 
   const filtered = agendas.filter(a => {
     if (filterStatus !== '전체' && a.status !== filterStatus) return false;
@@ -111,13 +107,21 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
   const handleDelete = async (id: string) => {
     if (!window.confirm('이 안건을 삭제하시겠습니까?')) return;
     setDeleting(id);
+    const deletedAgenda = agendas.find(a => a.id === id);
     optimisticDeleteAgenda(id);
+    setShowSidePeek(false);
     try {
       const { error } = await supabase.from('agendas').delete().eq('id', id);
       if (error) throw error;
-      setShowSidePeek(false);
-      showToast('안건이 삭제되었습니다.');
+      showToast('안건이 삭제되었습니다.', 'success', {
+        onUndo: deletedAgenda ? async () => {
+          const { id: _, ...payload } = deletedAgenda;
+          const { data } = await supabase.from('agendas').insert([payload]).select().single();
+          if (data) optimisticAddAgenda(data);
+        } : undefined,
+      });
     } catch (err) {
+      if (deletedAgenda) optimisticAddAgenda(deletedAgenda);
       showToast('삭제에 실패했습니다.', 'error');
     } finally {
       setDeleting(null);
@@ -144,23 +148,6 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
 
   return (
     <div className="animate-fade-in space-y-6 max-w-[1200px] mx-auto px-4 py-8">
-      {/* Toast */}
-      <AnimatePresence>
-        {notification && (
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className={cn(
-              "fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-lg shadow-xl border text-sm font-medium",
-              notification.type === 'success' ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-700"
-            )}
-          >
-            {notification.msg}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Header Section */}
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">

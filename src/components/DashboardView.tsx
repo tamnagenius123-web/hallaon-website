@@ -101,9 +101,9 @@ export const DashboardView = ({ tasks, agendas = [] }: DashboardViewProps) => {
   };
 
   return (
-    <div className="animate-fade-in space-y-6">
+    <div className="animate-fade-in space-y-5 md:space-y-6 px-4 py-6 md:py-8 max-w-[1200px] mx-auto">
       {/* Metrics */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {metrics.map((m, i) => (
           <div key={i} className="metric-card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -118,7 +118,7 @@ export const DashboardView = ({ tasks, agendas = [] }: DashboardViewProps) => {
       </div>
 
       {/* Progress + Agendas */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
+      <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4">
         <div className="notion-card p-5">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div style={{ fontWeight: 600, fontSize: 14 }}>프로젝트 완료율</div>
@@ -161,7 +161,7 @@ export const DashboardView = ({ tasks, agendas = [] }: DashboardViewProps) => {
       </div>
 
       {/* Workload Analysis Section */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Most Available Members */}
         <div className="notion-card p-5">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
@@ -226,7 +226,7 @@ export const DashboardView = ({ tasks, agendas = [] }: DashboardViewProps) => {
       {/* Team breakdown */}
       <div className="notion-card p-5">
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>팀별 업무 현황</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {teamStats.map(ts => (
             <div key={ts.team} style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: ts.color, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{ts.team}</div>
@@ -241,7 +241,7 @@ export const DashboardView = ({ tasks, agendas = [] }: DashboardViewProps) => {
       </div>
 
       {/* Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Status pie */}
         <div className="notion-card p-5">
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>상태별 분포</div>

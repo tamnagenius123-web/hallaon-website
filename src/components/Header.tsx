@@ -49,13 +49,13 @@ export const Header = ({ activeTab, presenceUsers }: HeaderProps) => {
   };
 
   return (
-    <header className="flex items-center justify-between h-11 px-4 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-30 select-none">
+    <header className="flex items-center justify-between h-11 px-3 md:px-4 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-30 select-none">
       {/* Left: Breadcrumbs */}
       <div className="flex items-center gap-1 overflow-hidden">
-        <div className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-[var(--notion-hover)] cursor-pointer text-muted-foreground transition-colors shrink-0">
-          <span className="text-sm font-medium">HALLAON Workspace</span>
+        <div className="hidden md:flex items-center gap-1 px-1.5 py-1 rounded hover:bg-[var(--notion-hover)] cursor-pointer text-muted-foreground transition-colors shrink-0">
+          <span className="text-sm font-medium">HALLAON</span>
         </div>
-        <ChevronRight size={14} className="text-muted-foreground/40 shrink-0" />
+        <ChevronRight size={14} className="text-muted-foreground/40 shrink-0 hidden md:block" />
         <div className="flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-[var(--notion-hover)] cursor-pointer transition-colors overflow-hidden">
           <currentTab.icon size={15} className="text-muted-foreground shrink-0" />
           <span className="text-sm font-semibold truncate">{currentTab.label}</span>
