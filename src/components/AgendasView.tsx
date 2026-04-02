@@ -14,6 +14,7 @@ import { useAppContext } from '../App';
 import { TEAM_OPTIONS as ORG_TEAMS, TEAM_COLORS as ORG_COLORS } from '../lib/orgChart';
 import { HanraonEditor } from './Editor';
 import { formatDate, cn } from '../lib/utils';
+import { CommentSection } from './CommentSection';
 
 interface AgendasViewProps {
   agendas: Agenda[];
@@ -441,6 +442,13 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
                     onChange={(content) => handleSave({ content })}
                   />
                 </div>
+
+                {/* Comment Section */}
+                {selectedAgenda && (
+                  <div className="border-t border-border pt-8">
+                    <CommentSection targetId={selectedAgenda.id} targetType="agenda" />
+                  </div>
+                )}
               </div>
             </motion.div>
           </>

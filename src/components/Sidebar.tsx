@@ -15,6 +15,7 @@ interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   onLogout: () => void;
+  onOpenCommandPalette?: () => void;
 }
 
 interface NavItem {
@@ -79,7 +80,7 @@ const TAB_LABELS: Record<string, string> = {
   drive: '자료실',
 };
 
-export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => {
+export const Sidebar = ({ activeTab, setActiveTab, onLogout, onOpenCommandPalette }: SidebarProps) => {
   const { theme, setTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [isHoveringSidebar, setIsHoveringSidebar] = useState(false);
@@ -213,7 +214,7 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => 
 
         {/* Search & Recent */}
         <div className="px-2 space-y-0.5 mb-4">
-          <div className="sidebar-item group">
+          <div className="sidebar-item group" onClick={() => onOpenCommandPalette?.()}>
             <Search size={16} />
             <span className="flex-1">검색</span>
             <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100">Ctrl+K</span>

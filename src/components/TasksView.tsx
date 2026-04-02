@@ -6,13 +6,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, ListTodo, CheckCircle2, Clock, User, Tag, Calendar, 
   Trash2, X, Search, Send, RefreshCw, MoreHorizontal, ChevronRight, LayoutGrid, List, AlertCircle,
-  Flag, ArrowRight, ArrowRightLeft, Table, BarChart2
+  Flag, ArrowRight, ArrowRightLeft, Table, BarChart2, UserCheck, Star as StarIcon
 } from 'lucide-react';
 import { useAppContext } from '../App';
 import { TEAM_OPTIONS as ORG_TEAMS, TEAM_COLORS as ORG_COLORS, expandAssignees } from '../lib/orgChart';
 import { HanraonEditor } from './Editor';
-import { formatDate, cn } from '../lib/utils';
+import { formatDate, cn, getRecommendedAssignees } from '../lib/utils';
 import { sendDiscordNotification, formatTaskForDiscord } from '../lib/discord';
+import { CommentSection } from './CommentSection';
 
 interface TasksViewProps {
   tasks: Task[];
@@ -62,6 +63,7 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
   const [sending, setSending] = useState<string | null>(null);
 
   const tasks = useMemo(() => calculateCriticalPath(initialTasks), [initialTasks]);
+  const recommendedAssignees = useMemo(() => getRecommendedAssignees(initialTasks), [initialTasks]);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setNotification({ msg, type });
@@ -460,12 +462,35 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
                     <User size={16} />
                     <span>담당자</span>
                   </div>
-                  <input
-                    value={form.assignee}
-                    onChange={e => handleSave({ assignee: e.target.value })}
-                    placeholder="담당자 입력"
-                    className="px-2 py-1 bg-transparent hover:bg-secondary rounded transition-colors outline-none"
-                  />
+                  <div className="flex flex-col gap-1">
+                    <input
+                      value={form.assignee}
+                      onChange={e => handleSave({ assignee: e.target.value })}
+                      placeholder="담당자 입력"
+                      className="px-2 py-1 bg-transparent hover:bg-secondary rounded transition-colors outline-none"
+                    />
+                    {/* Assignee Recommendations */}
+                    {!form.assignee && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {recommendedAssignees.slice(0, 4).map((rec, i) => (
+                          <button
+                            key={rec.userName}
+                            onClick={() => handleSave({ assignee: rec.userName })}
+                            className={cn(
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors cursor-pointer border",
+                              i === 0
+                                ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400"
+                                : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            {i === 0 && <UserCheck size={10} />}
+                            {rec.userName}
+                            <span className="opacity-60">({rec.taskCount})</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Calendar size={16} />
@@ -513,6 +538,13 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
                     onChange={(content) => handleSave({ content })}
                   />
                 </div>
+
+                {/* Comment Section */}
+                {selectedTask && (
+                  <div className="border-t border-border pt-8">
+                    <CommentSection targetId={selectedTask.id} targetType="task" />
+                  </div>
+                )}
               </div>
             </motion.div>
           </>
