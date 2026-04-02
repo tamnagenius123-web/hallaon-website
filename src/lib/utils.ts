@@ -1,5 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import type { Task, UserWorkload, PresenceUser } from "../types";
+import { TEAM_MEMBERS, expandAssignees } from "./orgChart";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -13,6 +15,68 @@ export function formatDate(date: string | Date) {
     month: "long",
     day: "numeric",
   });
+}
+
+/**
+ * Workload Analysis: Calculate per-user task statistics
+ * Returns sorted array (ascending by score = most available first)
+ */
+export function getWorkloadStats(tasks: Task[]): UserWorkload[] {
+  // Collect all unique member names from org chart
+  const allMembers = new Set<string>();
+  Object.values(TEAM_MEMBERS).forEach(members => members.forEach(m => allMembers.add(m)));
+
+  const stats: Record<string, { taskCount: number; completedCount: number; blockedCount: number }> = {};
+
+  // Initialize all members
+  allMembers.forEach(name => {
+    stats[name] = { taskCount: 0, completedCount: 0, blockedCount: 0 };
+  });
+
+  // Count tasks per assignee
+  tasks.forEach(task => {
+    const assignees = expandAssignees(task.assignee || '');
+    assignees.forEach(name => {
+      if (name === '미정') return;
+      if (!stats[name]) stats[name] = { taskCount: 0, completedCount: 0, blockedCount: 0 };
+
+      if (task.status === '완료') {
+        stats[name].completedCount++;
+      } else {
+        stats[name].taskCount++;
+        if (task.status === '막힘') {
+          stats[name].blockedCount++;
+        }
+      }
+    });
+  });
+
+  // Calculate scores and sort
+  return Object.entries(stats)
+    .map(([name, data]) => ({
+      userId: name,
+      userName: name,
+      taskCount: data.taskCount,
+      completedCount: data.completedCount,
+      blockedCount: data.blockedCount,
+      // Score: active tasks weighted, blocked tasks add extra weight
+      score: data.taskCount + data.blockedCount * 0.5,
+    }))
+    .sort((a, b) => a.score - b.score);
+}
+
+/**
+ * Get the top N most available members
+ */
+export function getMostAvailableMembers(tasks: Task[], count = 3): UserWorkload[] {
+  return getWorkloadStats(tasks).slice(0, count);
+}
+
+/**
+ * Get recommended assignees for a new task (sorted by availability)
+ */
+export function getRecommendedAssignees(tasks: Task[]): UserWorkload[] {
+  return getWorkloadStats(tasks);
 }
 
 export const NOTION_COLORS = {

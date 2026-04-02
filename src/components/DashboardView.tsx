@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Task } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
-import { AlertTriangle, CheckCircle2, Clock, Loader, TrendingUp } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Loader, TrendingUp, UserCheck, Users } from 'lucide-react';
 import { expandAssignees } from '../lib/orgChart';
+import { getWorkloadStats, getMostAvailableMembers } from '../lib/utils';
 
 interface DashboardViewProps {
   tasks: Task[];
@@ -33,6 +34,11 @@ const TEAM_OPTIONS = ['PM', 'CD', 'FS', 'DM', 'OPS'];
 
 export const DashboardView = ({ tasks, agendas = [] }: DashboardViewProps) => {
   const today = new Date();
+
+  // Workload Analysis
+  const workloadStats = useMemo(() => getWorkloadStats(tasks), [tasks]);
+  const availableMembers = useMemo(() => getMostAvailableMembers(tasks, 3), [tasks]);
+  const busiestMembers = useMemo(() => [...workloadStats].reverse().slice(0, 3), [workloadStats]);
   const total = tasks.length;
   const inProgress = tasks.filter(t => ['진행 중', '작업 중'].includes(t.status)).length;
   const blocked = tasks.filter(t => t.status === '막힘').length;
@@ -148,6 +154,69 @@ export const DashboardView = ({ tasks, agendas = [] }: DashboardViewProps) => {
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
                 <span style={{ color: 'var(--muted-foreground)' }}>{s.label}</span>
                 <span style={{ fontWeight: 700, color: s.color }}>{s.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Workload Analysis Section */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {/* Most Available Members */}
+        <div className="notion-card p-5">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <UserCheck size={16} style={{ color: '#37B24D' }} />
+            <div style={{ fontWeight: 600, fontSize: 14 }}>여유 있는 멤버</div>
+            <span style={{ fontSize: 11, color: 'var(--muted-foreground)', fontWeight: 400 }}>업무 배정 추천</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {availableMembers.map((member, i) => (
+              <div key={member.userName} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: i === 0 ? 'rgba(55,178,77,0.08)' : 'var(--secondary)', border: i === 0 ? '1px solid rgba(55,178,77,0.2)' : '1px solid var(--border)' }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: i === 0 ? '#37B24D' : 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
+                  {member.userName[0]}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>
+                    {member.userName}
+                    {i === 0 && <span style={{ fontSize: 10, color: '#37B24D', marginLeft: 6, fontWeight: 700 }}>BEST</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>
+                    진행 중 {member.taskCount}건 | 완료 {member.completedCount}건
+                  </div>
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: i === 0 ? '#37B24D' : 'var(--foreground)' }}>
+                  {member.taskCount}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Busiest Members */}
+        <div className="notion-card p-5">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <Users size={16} style={{ color: '#E03E3E' }} />
+            <div style={{ fontWeight: 600, fontSize: 14 }}>업무 과부하 멤버</div>
+            <span style={{ fontSize: 11, color: 'var(--muted-foreground)', fontWeight: 400 }}>업무 분산 필요</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {busiestMembers.map((member, i) => (
+              <div key={member.userName} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: i === 0 ? 'rgba(224,62,62,0.06)' : 'var(--secondary)', border: i === 0 ? '1px solid rgba(224,62,62,0.2)' : '1px solid var(--border)' }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: i === 0 ? '#E03E3E' : '#F76707', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
+                  {member.userName[0]}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>
+                    {member.userName}
+                    {member.blockedCount > 0 && <span style={{ fontSize: 10, color: '#E03E3E', marginLeft: 6 }}>({member.blockedCount}건 막힘)</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>
+                    진행 중 {member.taskCount}건 | 완료 {member.completedCount}건
+                  </div>
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: i === 0 ? '#E03E3E' : 'var(--foreground)' }}>
+                  {member.taskCount}
+                </div>
               </div>
             ))}
           </div>

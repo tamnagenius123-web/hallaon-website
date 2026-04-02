@@ -2,10 +2,20 @@ import { google } from 'googleapis';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Security: Restrict CORS to known origins (set your Vercel domain)
+  const allowedOrigins = [
+    process.env.APP_URL,
+    'http://localhost:3000',
+    'http://localhost:5173',
+  ].filter(Boolean);
+
+  const origin = req.headers.origin || '';
+  const isAllowed = allowedOrigins.some(o => origin.startsWith(o || '')) || !origin;
+
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  res.setHeader('Access-Control-Allow-Origin', isAllowed ? origin || '*' : allowedOrigins[0] || '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 

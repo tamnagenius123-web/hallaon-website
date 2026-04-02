@@ -22,6 +22,8 @@ import { GanttView } from './components/GanttView';
 import { HomeView } from './components/HomeView';
 import { IntroAnimation } from './components/IntroAnimation';
 import { AuthView } from './components/AuthView';
+import { CommandPalette } from './components/CommandPalette';
+import { SkeletonLoader } from './components/SkeletonLoader';
 
 // Global App Context for Optimistic UI
 export interface AppContextType {
@@ -31,6 +33,7 @@ export interface AppContextType {
   decisions: Decision[];
   session: any;
   refreshing: boolean;
+  presenceUsers: PresenceUser[];
   // Optimistic mutators
   optimisticUpdateTask: (id: string, patch: Partial<Task>) => void;
   optimisticAddTask: (task: Task) => void;
@@ -65,6 +68,19 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const [presenceUsers, setPresenceUsers] = useState<PresenceUser[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
+  // Global keyboard shortcut: Ctrl+K / Cmd+K
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // --- Session ---
   useEffect(() => {
@@ -145,25 +161,73 @@ function AppContent() {
     }
   }, [session]);
 
+  // --- Delta Update Handlers (Architecture Fix: avoid full refetch on each realtime event) ---
+  const handleRealtimeTask = useCallback((payload: any) => {
+    const { eventType, new: newRow, old: oldRow } = payload;
+    if (eventType === 'INSERT' && newRow) {
+      setTasks(prev => {
+        if (prev.some(t => t.id === newRow.id)) return prev;
+        return [...prev, newRow as Task].sort((a, b) => (a.wbs_code || '').localeCompare(b.wbs_code || ''));
+      });
+    } else if (eventType === 'UPDATE' && newRow) {
+      setTasks(prev => prev.map(t => t.id === newRow.id ? { ...t, ...newRow } : t));
+    } else if (eventType === 'DELETE' && oldRow) {
+      setTasks(prev => prev.filter(t => t.id !== oldRow.id));
+    }
+  }, []);
+
+  const handleRealtimeAgenda = useCallback((payload: any) => {
+    const { eventType, new: newRow, old: oldRow } = payload;
+    if (eventType === 'INSERT' && newRow) {
+      setAgendas(prev => prev.some(a => a.id === newRow.id) ? prev : [newRow as Agenda, ...prev]);
+    } else if (eventType === 'UPDATE' && newRow) {
+      setAgendas(prev => prev.map(a => a.id === newRow.id ? { ...a, ...newRow } : a));
+    } else if (eventType === 'DELETE' && oldRow) {
+      setAgendas(prev => prev.filter(a => a.id !== oldRow.id));
+    }
+  }, []);
+
+  const handleRealtimeMeeting = useCallback((payload: any) => {
+    const { eventType, new: newRow, old: oldRow } = payload;
+    if (eventType === 'INSERT' && newRow) {
+      setMeetings(prev => prev.some(m => m.id === newRow.id) ? prev : [newRow as Meeting, ...prev]);
+    } else if (eventType === 'UPDATE' && newRow) {
+      setMeetings(prev => prev.map(m => m.id === newRow.id ? { ...m, ...newRow } : m));
+    } else if (eventType === 'DELETE' && oldRow) {
+      setMeetings(prev => prev.filter(m => m.id !== oldRow.id));
+    }
+  }, []);
+
+  const handleRealtimeDecision = useCallback((payload: any) => {
+    const { eventType, new: newRow, old: oldRow } = payload;
+    if (eventType === 'INSERT' && newRow) {
+      setDecisions(prev => prev.some(d => d.id === newRow.id) ? prev : [newRow as Decision, ...prev]);
+    } else if (eventType === 'UPDATE' && newRow) {
+      setDecisions(prev => prev.map(d => d.id === newRow.id ? { ...d, ...newRow } : d));
+    } else if (eventType === 'DELETE' && oldRow) {
+      setDecisions(prev => prev.filter(d => d.id !== oldRow.id));
+    }
+  }, []);
+
   useEffect(() => {
     if (!session) return;
     fetchData(true);
     const channels = [
       supabase.channel('rt-tasks')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchData(false))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, handleRealtimeTask)
         .subscribe(),
       supabase.channel('rt-agendas')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'agendas' }, () => fetchData(false))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'agendas' }, handleRealtimeAgenda)
         .subscribe(),
       supabase.channel('rt-meetings')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => fetchData(false))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, handleRealtimeMeeting)
         .subscribe(),
       supabase.channel('rt-decisions')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'decisions' }, () => fetchData(false))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'decisions' }, handleRealtimeDecision)
         .subscribe(),
     ];
     return () => { channels.forEach(c => supabase.removeChannel(c)); };
-  }, [session, fetchData]);
+  }, [session, fetchData, handleRealtimeTask, handleRealtimeAgenda, handleRealtimeMeeting, handleRealtimeDecision]);
 
   // --- Optimistic Mutators ---
   const optimisticUpdateTask = useCallback((id: string, patch: Partial<Task>) => {
@@ -206,7 +270,7 @@ function AppContent() {
   const refetch = useCallback(() => fetchData(false), [fetchData]);
 
   const contextValue: AppContextType = {
-    tasks, agendas, meetings, decisions, session, refreshing,
+    tasks, agendas, meetings, decisions, session, refreshing, presenceUsers,
     optimisticUpdateTask, optimisticAddTask, optimisticDeleteTask,
     optimisticUpdateAgenda, optimisticAddAgenda, optimisticDeleteAgenda,
     optimisticAddMeeting, optimisticUpdateMeeting, optimisticDeleteMeeting,
@@ -225,7 +289,7 @@ function AppContent() {
   return (
     <AppContext.Provider value={contextValue}>
       <div className="flex h-screen bg-background overflow-hidden">
-        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
+        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} onOpenCommandPalette={() => setCommandPaletteOpen(true)} />
 
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
           <Header
@@ -234,12 +298,16 @@ function AppContent() {
             onRefresh={() => fetchData(false)}
           />
 
+          {/* Command Palette */}
+          <CommandPalette
+            isOpen={commandPaletteOpen}
+            onClose={() => setCommandPaletteOpen(false)}
+            onNavigate={(tab) => { setActiveTab(tab); setCommandPaletteOpen(false); }}
+          />
+
           <main className="flex-1 overflow-auto">
             {loading ? (
-              <div className="flex flex-col items-center justify-center h-[60vh] gap-4 text-muted-foreground animate-pulse">
-                <div className="w-8 h-8 rounded-full border-2 border-border border-t-primary animate-spin" />
-                <span className="text-sm font-medium">데이터를 불러오는 중...</span>
-              </div>
+              <SkeletonLoader />
             ) : (
               <AnimatePresence mode="wait">
                 <motion.div

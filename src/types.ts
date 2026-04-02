@@ -76,3 +76,25 @@ export interface PresenceUser {
   email: string;
   online_at: string;
 }
+
+// Workload Analysis
+export interface UserWorkload {
+  userId: string;
+  userName: string;
+  taskCount: number;
+  completedCount: number;
+  blockedCount: number;
+  score: number; // Lower = more available
+}
+
+// Comment System
+export interface Comment {
+  id: string;
+  content: string;
+  user_id: string;
+  user_name: string;
+  target_type: 'task' | 'agenda' | 'doc';
+  target_id: string;
+  created_at: string;
+  updated_at?: string;
+}
