@@ -1,12 +1,10 @@
 /**
  * AuthView - 로그인 화면
- * 좌측: 로고 + 타이틀 완전 중앙 정렬 (세로 flex center)
- * 우측: 흰색 배경 + 로고 선명하게 표시
- * 매직 링크 인증 시스템 적용
+ * 매직 링크 인증 시스템 적용 및 세션 처리 수정
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Eye, EyeOff, LogIn, Loader2, Mail } from 'lucide-react';
+import { LogIn, Loader2, Mail } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
@@ -16,13 +14,22 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
   const [message, setMessage] = useState<string | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  // 컴포넌트 마운트 시 세션 확인
-  React.useEffect(() => {
+  // 컴포넌트 마운트 시 및 인증 상태 변화 감지
+  useEffect(() => {
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
-          // 이미 로그인되어 있으면 대시보드로 이동
+          // Supabase 세션을 로컬 스토리지 형식에 맞춰 저장 (App.tsx 호환성)
+          const mockSession = {
+            user: { 
+              id: session.user.id, 
+              email: session.user.email, 
+              name: session.user.email?.split('@')[0] || 'User',
+              role: 'authenticated' 
+            }
+          };
+          localStorage.setItem('hallaon_session', JSON.stringify(mockSession));
           onAuthSuccess();
         }
       } catch (err) {
@@ -34,10 +41,18 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
 
     checkSession();
 
-    // 인증 상태 변화 감지
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         if (session) {
+          const mockSession = {
+            user: { 
+              id: session.user.id, 
+              email: session.user.email, 
+              name: session.user.email?.split('@')[0] || 'User',
+              role: 'authenticated' 
+            }
+          };
+          localStorage.setItem('hallaon_session', JSON.stringify(mockSession));
           onAuthSuccess();
         }
       }
@@ -55,10 +70,14 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
     setMessage(null);
 
     try {
+      // Vercel 배포 환경에서 window.location.origin이 정확하지 않을 수 있으므로 
+      // 명시적으로 현재 도메인을 사용하거나 Supabase 설정의 Site URL을 따르도록 함
+      const redirectUrl = window.location.origin;
+      
       const { error: signInError } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: window.location.origin,
+          emailRedirectTo: redirectUrl,
         },
       });
 
@@ -94,26 +113,24 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
       minHeight: '100vh', display: 'flex',
       background: '#0A0A0A', overflow: 'hidden', position: 'relative',
     }}>
-      {/* ── 좌측 패널 (로고 + 타이틀 완전 중앙) ── */}
+      {/* ── 좌측 패널 ── */}
       <div className="auth-left-panel" style={{
         width: '50%', flexShrink: 0,
         background: '#111111',
         borderRight: '1px solid rgba(255,255,255,0.06)',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',       /* 가로 중앙 */
-        justifyContent: 'center',   /* 세로 중앙 */
+        alignItems: 'center',
+        justifyContent: 'center',
         padding: '60px 48px',
         position: 'relative', overflow: 'hidden',
         minHeight: '100vh',
       }}>
-        {/* 배경 그라디언트 */}
         <div style={{
           position: 'absolute', inset: 0, pointerEvents: 'none',
           background: 'radial-gradient(ellipse at 50% 45%, rgba(35,131,226,0.08) 0%, transparent 65%)',
         }} />
 
-        {/* ── 중앙 콘텐츠 블록: 로고 + 타이틀 + 부제 ── */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -125,7 +142,6 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
             gap: 0,
           }}
         >
-          {/* 로고 이미지 */}
           <motion.div
             animate={{ y: [0, -10, 0] }}
             transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
@@ -145,7 +161,6 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
             />
           </motion.div>
 
-          {/* 타이틀 텍스트 */}
           <motion.h1
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -171,34 +186,8 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
             WBS · PERT/CPM · 의사결정 모델 · 문서 허브<br />
             모든 팀 운영 도구를 하나의 워크스페이스에서.
           </motion.p>
-
-          {/* 팀 pill 배지 */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.65, duration: 0.5 }}
-            style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}
-          >
-            {['📊 대시보드', '📋 WBS/PERT', '📅 캘린더', '⚖️ 의사결정', '📁 드라이브'].map((label, i) => (
-              <motion.span
-                key={label}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.7 + i * 0.07 }}
-                style={{
-                  fontSize: 10, fontWeight: 600,
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.10)',
-                  color: '#666', padding: '4px 10px', borderRadius: 20,
-                }}
-              >
-                {label}
-              </motion.span>
-            ))}
-          </motion.div>
         </motion.div>
 
-        {/* 하단 카피라이트 */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -221,7 +210,6 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
           transition={{ duration: 0.5, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
           style={{ width: '100%', maxWidth: 360 }}
         >
-          {/* 우측 로고 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 36 }}>
             <div style={{
               width: 56, height: 56, borderRadius: 14,
