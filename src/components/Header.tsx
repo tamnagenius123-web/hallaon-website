@@ -26,13 +26,13 @@ const TAB_CONFIG: Record<string, { label: string, icon: any }> = {
 
 export const Header = ({ activeTab, presenceUsers }: HeaderProps) => {
   const currentTab = TAB_CONFIG[activeTab] || { label: 'Workspace', icon: Home };
-  const [isFavorited, setIsFavorited] = React.useState(false);
+  const [isFavorited, ReactSetIsFavorited] = React.useState(false);
 
   React.useEffect(() => {
     const stored = localStorage.getItem('hallaon_favorites');
     if (stored) {
       const favs = new Set(JSON.parse(stored));
-      setIsFavorited(favs.has(activeTab));
+      ReactSetIsFavorited(favs.has(activeTab));
     }
   }, [activeTab]);
 
@@ -45,7 +45,7 @@ export const Header = ({ activeTab, presenceUsers }: HeaderProps) => {
       favs.add(activeTab);
     }
     localStorage.setItem('hallaon_favorites', JSON.stringify(Array.from(favs)));
-    setIsFavorited(!isFavorited);
+    ReactSetIsFavorited(!isFavorited);
   };
 
   return (
@@ -67,15 +67,20 @@ export const Header = ({ activeTab, presenceUsers }: HeaderProps) => {
         {/* Presence Users */}
         {presenceUsers.length > 0 && (
           <div className="flex -space-x-1.5 items-center">
-            {presenceUsers.slice(0, 3).map((u, i) => (
-              <div 
-                key={i} 
-                className="w-6 h-6 rounded-full border-2 border-background bg-primary text-primary-foreground flex items-center justify-center text-[9px] font-bold uppercase"
-                title={u.email}
-              >
-                {u.email?.[0] || 'U'}
-              </div>
-            ))}
+            {presenceUsers.slice(0, 3).map((u, i) => {
+              // 실제 이름이 있으면 사용하고, 없으면 이메일 앞부분 사용
+              const displayName = u.name || u.user_metadata?.full_name || u.email?.split('@')[0] || 'User';
+              const initial = displayName.charAt(0).toUpperCase();
+              return (
+                <div 
+                  key={i} 
+                  className="w-6 h-6 rounded-full border-2 border-background bg-primary text-primary-foreground flex items-center justify-center text-[9px] font-bold uppercase"
+                  title={`${displayName} ${u.email ? `(${u.email})` : ''}`}
+                >
+                  {initial}
+                </div>
+              );
+            })}
             {presenceUsers.length > 3 && (
               <div className="w-6 h-6 rounded-full border-2 border-background bg-secondary text-muted-foreground flex items-center justify-center text-[9px] font-bold">
                 +{presenceUsers.length - 3}
