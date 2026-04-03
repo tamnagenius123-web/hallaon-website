@@ -2,43 +2,92 @@
  * AuthView - 로그인 화면
  * 좌측: 로고 + 타이틀 완전 중앙 정렬 (세로 flex center)
  * 우측: 흰색 배경 + 로고 선명하게 표시
+ * 매직 링크 인증 시스템 적용
  */
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Eye, EyeOff, LogIn, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, LogIn, Loader2, Mail } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPw, setShowPw] = useState(false);
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  // 컴포넌트 마운트 시 세션 확인
+  React.useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          // 이미 로그인되어 있으면 대시보드로 이동
+          onAuthSuccess();
+        }
+      } catch (err) {
+        console.error('세션 확인 중 오류:', err);
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+
+    checkSession();
+
+    // 인증 상태 변화 감지
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (session) {
+          onAuthSuccess();
+        }
+      }
+    );
+
+    return () => {
+      subscription?.unsubscribe();
+    };
+  }, [onAuthSuccess]);
+
+  const handleMagicLinkLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    try {
-      const { data, error: queryError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('name', username)
-        .eq('password', password)
-        .single();
+    setMessage(null);
 
-      if (queryError || !data) throw new Error('ID 또는 비밀번호가 일치하지 않습니다.');
-      const mockSession = {
-        user: { id: data.name, email: data.name, name: data.name, role: data.role || 'view' }
-      };
-      localStorage.setItem('hallaon_session', JSON.stringify(mockSession));
-      onAuthSuccess();
+    try {
+      const { error: signInError } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: window.location.origin,
+        },
+      });
+
+      if (signInError) {
+        setError(signInError.message || '매직 링크 요청 중 오류가 발생했습니다.');
+      } else {
+        setMessage('✉️ 이메일로 매직 링크가 발송되었습니다! 메일함을 확인해주세요.');
+        setEmail('');
+      }
     } catch (err: any) {
       setError(err.message || '로그인 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
   };
+
+  if (isCheckingAuth) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#0A0A0A',
+      }}>
+        <Loader2 size={32} style={{ animation: 'spin 1s linear infinite', color: '#2383E2' }} />
+      </div>
+    );
+  }
 
   return (
     <div className="auth-container" style={{
@@ -76,29 +125,27 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
             gap: 0,
           }}
         >
-          {/* 로고 이미지 — 어두운 배경이므로 brightness(0) invert(1)로 흰색 처리 */}
-{/* ── 기존의 삐딱했던 모션 블록을 이걸로 덮어쓰세요 ── */}
+          {/* 로고 이미지 */}
           <motion.div
             animate={{ y: [0, -10, 0] }}
             transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-            style={{ marginBottom: 32, width: '100%' }} /* 👈 넓이를 꽉 채우게 수정 */
+            style={{ marginBottom: 32, width: '100%' }}
           >
             <img
               src="/logo.png"
               alt="HALLAON"
               style={{
-                width: '240px', /* 이상하게 작동하던 비율(clamp) 대신 안정적인 고정 크기로 변경 */
+                width: '240px',
                 height: 'auto',
                 objectFit: 'contain',
                 display: 'block',
-                margin: '0 auto', /* 👈 핵심! 완벽한 가운데 정렬을 만드는 마법의 코드 */
+                margin: '0 auto',
                 filter: 'brightness(0) invert(1) drop-shadow(0 8px 28px rgba(35,131,226,0.45))',
               }}
             />
           </motion.div>
-          {/* ──────────────────────────────────────────────── */}
 
-          {/* 타이틀 텍스트 — 로고와 같은 중앙 블록 */}
+          {/* 타이틀 텍스트 */}
           <motion.h1
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -174,11 +221,11 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
           transition={{ duration: 0.5, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
           style={{ width: '100%', maxWidth: 360 }}
         >
-          {/* 우측 로고 — 어두운 배경 박스로 로고 선명하게 */}
+          {/* 우측 로고 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 36 }}>
             <div style={{
               width: 56, height: 56, borderRadius: 14,
-              background: '#111111',         /* 어두운 배경 → 흰색 로고 선명하게 */
+              background: '#111111',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               padding: 10, flexShrink: 0,
               boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
@@ -200,46 +247,23 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
           </div>
 
           <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 6, color: '#111111' }}>
-            로그인
+            매직 링크 로그인
           </h2>
           <p style={{ color: '#666666', fontSize: 13, marginBottom: 28, lineHeight: 1.6 }}>
-            팀 계정으로 워크스페이스에 접속하세요
+            이메일로 매직 링크를 받고 로그인하세요
           </p>
 
-          <form onSubmit={handleLogin}>
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: '#333333' }}>
-                이름 (ID)
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                placeholder="이름을 입력하세요"
-                style={{
-                  width: '100%', padding: '11px 14px', boxSizing: 'border-box',
-                  border: '1.5px solid #E5E7EB', borderRadius: 10,
-                  fontSize: 14, color: '#111111', background: '#FAFAFA',
-                  outline: 'none', transition: 'border-color 0.2s',
-                }}
-                onFocus={e => (e.currentTarget.style.borderColor = '#2383E2')}
-                onBlur={e => (e.currentTarget.style.borderColor = '#E5E7EB')}
-                autoComplete="username"
-                required
-                autoFocus
-              />
-            </div>
-
+          <form onSubmit={handleMagicLinkLogin}>
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: '#333333' }}>
-                비밀번호
+                이메일
               </label>
               <div style={{ position: 'relative' }}>
                 <input
-                  type={showPw ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="비밀번호를 입력하세요"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="이메일을 입력하세요"
                   style={{
                     width: '100%', padding: '11px 44px 11px 14px', boxSizing: 'border-box',
                     border: '1.5px solid #E5E7EB', borderRadius: 10,
@@ -248,20 +272,14 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
                   }}
                   onFocus={e => (e.currentTarget.style.borderColor = '#2383E2')}
                   onBlur={e => (e.currentTarget.style.borderColor = '#E5E7EB')}
-                  autoComplete="current-password"
+                  autoComplete="email"
                   required
+                  autoFocus
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPw(!showPw)}
-                  style={{
-                    position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-                    color: '#888888', background: 'none', border: 'none',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4,
-                  }}
-                >
-                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+                <Mail size={16} style={{
+                  position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                  color: '#888888', pointerEvents: 'none',
+                }} />
               </div>
             </div>
 
@@ -275,6 +293,19 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
                 }}
               >
                 ⚠️ {error}
+              </motion.div>
+            )}
+
+            {message && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={{
+                  background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.22)',
+                  color: '#16A34A', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14,
+                }}
+              >
+                {message}
               </motion.div>
             )}
 
@@ -294,8 +325,8 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
               }}
             >
               {loading
-                ? <><Loader2 size={17} style={{ animation: 'spin 1s linear infinite' }} /> 로그인 중...</>
-                : <><LogIn size={17} /> 로그인</>
+                ? <><Loader2 size={17} style={{ animation: 'spin 1s linear infinite' }} /> 전송 중...</>
+                : <><Mail size={17} /> 매직 링크 받기</>
               }
             </motion.button>
           </form>

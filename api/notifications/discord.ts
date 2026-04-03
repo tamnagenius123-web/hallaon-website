@@ -1,7 +1,10 @@
 /**
  * Vercel Serverless Function — Discord Webhook Notification
  * POST /api/notifications/discord
- * Body: { message: string }
+ * 
+ * 두 가지 형식의 요청을 처리합니다:
+ * 1. 프론트엔드에서: { message: string }
+ * 2. Supabase DB Webhook에서: { type: 'INSERT'|'UPDATE'|'DELETE', table: string, record: object }
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
@@ -23,25 +26,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Discord Webhook URL not configured' });
   }
 
-  const { message } = req.body;
-  if (!message || typeof message !== 'string') {
-    return res.status(400).json({ error: 'Message is required' });
-  }
-
   try {
+    let discordMessage = '';
+
+    // Supabase Database Webhook 요청 처리
+    if (req.body.type && req.body.record) {
+      const { type, table, record } = req.body;
+      const title = record.title || record.content || record.name || '새 항목';
+      
+      const actionEmoji = {
+        'INSERT': '✨',
+        'UPDATE': '🔄',
+        'DELETE': '🗑️'
+      }[type] || '📝';
+
+      discordMessage = `${actionEmoji} **[${table.toUpperCase()}]** ${type === 'INSERT' ? '새로운 항목이 추가되었습니다' : type === 'UPDATE' ? '항목이 수정되었습니다' : '항목이 삭제되었습니다'}: **${title}**`;
+    }
+    // 프론트엔드에서 직접 보낸 메시지 처리
+    else if (req.body.message && typeof req.body.message === 'string') {
+      discordMessage = req.body.message;
+    }
+    else {
+      return res.status(400).json({ error: 'Invalid request format' });
+    }
+
+    // Discord로 메시지 전송
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: message.slice(0, 2000) }), // Discord limit
+      body: JSON.stringify({ 
+        content: discordMessage.slice(0, 2000) // Discord 메시지 길이 제한
+      }),
     });
 
     if (response.ok) {
-      return res.status(200).json({ success: true });
+      return res.status(200).json({ success: true, message: 'Discord notification sent' });
     } else {
       const errorText = await response.text();
-      return res.status(500).json({ error: 'Discord API error', details: errorText });
+      return res.status(500).json({ 
+        error: 'Discord API error', 
+        details: errorText 
+      });
     }
   } catch (error: any) {
-    return res.status(500).json({ error: 'Internal server error', details: error.message });
+    console.error('Discord notification error:', error);
+    return res.status(500).json({ 
+      error: 'Internal server error', 
+      details: error.message 
+    });
   }
 }
