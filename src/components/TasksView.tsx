@@ -14,6 +14,7 @@ import { HanraonEditor } from './Editor';
 import { formatDate, cn, getRecommendedAssignees } from '../lib/utils';
 import { sendDiscordNotification, formatTaskForDiscord } from '../lib/discord';
 import { CommentSection } from './CommentSection';
+import { useToast } from './Toast';
 
 interface TasksViewProps {
   tasks: Task[];
@@ -52,6 +53,7 @@ const defaultForm: TaskForm = {
 
 export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
   const { optimisticUpdateTask, optimisticAddTask, optimisticDeleteTask } = useAppContext();
+  const { showToast } = useToast();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showSidePeek, setShowSidePeek] = useState(false);
   const [form, setForm] = useState<TaskForm>(defaultForm);
@@ -59,16 +61,10 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
   const [filterTeam, setFilterTeam] = useState('전체');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
-  const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [sending, setSending] = useState<string | null>(null);
 
   const tasks = useMemo(() => calculateCriticalPath(initialTasks), [initialTasks]);
   const recommendedAssignees = useMemo(() => getRecommendedAssignees(initialTasks), [initialTasks]);
-
-  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
-    setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 3000);
-  };
 
   const filtered = tasks.filter(t => {
     if (filterStatus !== '전체' && t.status !== filterStatus) return false;
@@ -135,13 +131,24 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('이 업무를 삭제하시겠습니까?')) return;
+    // Save for rollback
+    const deletedTask = initialTasks.find(t => t.id === id);
     optimisticDeleteTask(id);
+    setShowSidePeek(false);
     try {
       const { error } = await supabase.from('tasks').delete().eq('id', id);
       if (error) throw error;
-      setShowSidePeek(false);
-      showToast('업무가 삭제되었습니다.');
+      showToast('업무가 삭제되었습니다.', 'success', {
+        onUndo: deletedTask ? async () => {
+          // Rollback: re-insert the task
+          const { id: _, ...payload } = deletedTask;
+          const { data } = await supabase.from('tasks').insert([payload]).select().single();
+          if (data) optimisticAddTask(data);
+        } : undefined,
+      });
     } catch (err) {
+      // Rollback on failure
+      if (deletedTask) optimisticAddTask(deletedTask);
       showToast('삭제에 실패했습니다.', 'error');
     }
   };
@@ -152,6 +159,9 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
       const message = formatTaskForDiscord(task);
       const ok = await sendDiscordNotification(message);
       if (ok) {
+        // Fix: Update is_sent flag in DB and optimistic state (audit item 5-4)
+        optimisticUpdateTask(task.id, { is_sent: true });
+        await supabase.from('tasks').update({ is_sent: true }).eq('id', task.id);
         showToast(`"${task.title}" 디스코드 전송 완료!`);
       } else {
         showToast('디스코드 전송 실패.', 'error');
@@ -165,23 +175,6 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
 
   return (
     <div className="animate-fade-in space-y-6 max-w-[1200px] mx-auto px-4 py-8">
-      {/* Toast */}
-      <AnimatePresence>
-        {notification && (
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className={cn(
-              "fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-lg shadow-xl border text-sm font-medium",
-              notification.type === 'success' ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-700"
-            )}
-          >
-            {notification.msg}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Header Section */}
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
@@ -268,6 +261,11 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
             >
               {task.is_critical && (
                 <div className="absolute top-0 right-0 px-2 py-0.5 bg-red-500 text-[9px] text-white font-bold uppercase tracking-widest">Critical</div>
+              )}
+              {task.is_sent && (
+                <div className="absolute top-0 left-0 px-1.5 py-0.5 bg-green-500/80 text-[8px] text-white font-bold rounded-br-md" title="디스코드 전송됨">
+                  <Send size={9} className="inline mr-0.5" />전송됨
+                </div>
               )}
               <div className="flex items-start justify-between gap-2">
                 <h3 className="font-semibold text-base group-hover:text-primary transition-colors line-clamp-2">

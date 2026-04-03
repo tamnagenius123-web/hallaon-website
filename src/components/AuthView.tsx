@@ -41,12 +41,12 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
   };
 
   return (
-    <div style={{
+    <div className="auth-container" style={{
       minHeight: '100vh', display: 'flex',
       background: '#0A0A0A', overflow: 'hidden', position: 'relative',
     }}>
       {/* ── 좌측 패널 (로고 + 타이틀 완전 중앙) ── */}
-      <div style={{
+      <div className="auth-left-panel" style={{
         width: '50%', flexShrink: 0,
         background: '#111111',
         borderRight: '1px solid rgba(255,255,255,0.06)',
@@ -163,7 +163,7 @@ export const AuthView = ({ onAuthSuccess }: { onAuthSuccess: () => void }) => {
       </div>
 
       {/* ── 우측 로그인 패널 ── */}
-      <div style={{
+      <div className="auth-right-panel" style={{
         flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '40px 32px', position: 'relative',
         background: '#FFFFFF',

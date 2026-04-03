@@ -24,6 +24,8 @@ import { IntroAnimation } from './components/IntroAnimation';
 import { AuthView } from './components/AuthView';
 import { CommandPalette } from './components/CommandPalette';
 import { SkeletonLoader } from './components/SkeletonLoader';
+import { BottomNav } from './components/BottomNav';
+import { ToastProvider } from './components/Toast';
 
 // Global App Context for Optimistic UI
 export interface AppContextType {
@@ -289,7 +291,10 @@ function AppContent() {
   return (
     <AppContext.Provider value={contextValue}>
       <div className="flex h-screen bg-background overflow-hidden">
-        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} onOpenCommandPalette={() => setCommandPaletteOpen(true)} />
+        {/* Desktop Sidebar - hidden on mobile */}
+        <div className="hidden md:block">
+          <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} onOpenCommandPalette={() => setCommandPaletteOpen(true)} />
+        </div>
 
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
           <Header
@@ -305,7 +310,7 @@ function AppContent() {
             onNavigate={(tab) => { setActiveTab(tab); setCommandPaletteOpen(false); }}
           />
 
-          <main className="flex-1 overflow-auto">
+          <main className="flex-1 overflow-auto pb-[60px] md:pb-0">
             {loading ? (
               <SkeletonLoader />
             ) : (
@@ -318,7 +323,7 @@ function AppContent() {
                   transition={{ duration: 0.15, ease: 'easeOut' }}
                   className="h-full"
                 >
-                  {activeTab === 'home' && <HomeView onNavigate={setActiveTab} />}
+                  {activeTab === 'home' && <HomeView tasks={tasks} agendas={agendas} meetings={meetings} onNavigate={setActiveTab} />}
                   {activeTab === 'dashboard' && <DashboardView tasks={tasks} agendas={agendas} />}
                   {activeTab === 'tasks' && <TasksView tasks={tasks} />}
                   {activeTab === 'gantt' && <GanttView tasks={tasks} />}
@@ -332,6 +337,14 @@ function AppContent() {
             )}
           </main>
         </div>
+
+        {/* Mobile Bottom Navigation */}
+        <BottomNav
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          onLogout={handleLogout}
+          onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        />
       </div>
     </AppContext.Provider>
   );
@@ -340,7 +353,9 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </ThemeProvider>
   );
 }
