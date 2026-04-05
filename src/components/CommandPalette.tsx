@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, ListTodo, ClipboardList, BookOpen, BarChart2,
   Calendar, Scale, HardDrive, Home, LayoutDashboard, X,

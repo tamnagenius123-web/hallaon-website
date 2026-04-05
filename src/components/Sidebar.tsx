@@ -4,12 +4,12 @@ import {
   LogOut, HardDrive, Scale, Sun, Moon, ClipboardList,
   ChevronDown, ChevronRight, Home, BarChart2, BookOpen,
   ChevronLeft, ChevronRightIcon, Plus, Search, Settings,
-  Clock, Trash2, MoreHorizontal, Star, X
+  Clock, Trash2, MoreHorizontal, Star, X, Columns3
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTheme } from 'next-themes';
 import { supabase } from '../lib/supabase';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface SidebarProps {
   activeTab: string;
@@ -49,6 +49,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
         label: '프로젝트',
         subItems: [
           { id: 'tasks', icon: ListTodo, label: '업무 및 WBS' },
+          { id: 'kanban', icon: Columns3, label: '칸반 보드' },
           { id: 'gantt', icon: LayoutDashboard, label: '간트 차트' },
           { id: 'calendar', icon: CalendarIcon, label: '캘린더' },
         ]
@@ -72,6 +73,7 @@ const TAB_LABELS: Record<string, string> = {
   home: '홈 · 가이드',
   dashboard: '대시보드',
   tasks: '업무 및 WBS',
+  kanban: '칸반 보드',
   gantt: '간트 차트',
   calendar: '캘린더',
   agendas: '안건',

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Task } from '../types';
 import { calculateCriticalPath } from '../lib/pert';
 import { supabase } from '../lib/supabase';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Plus, ListTodo, CheckCircle2, Clock, User, Tag, Calendar, 
   Trash2, X, Search, Send, RefreshCw, MoreHorizontal, ChevronRight, LayoutGrid, List, AlertCircle,

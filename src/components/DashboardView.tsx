@@ -4,6 +4,9 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieCha
 import { AlertTriangle, CheckCircle2, Clock, Loader, TrendingUp, UserCheck, Users } from 'lucide-react';
 import { expandAssignees } from '../lib/orgChart';
 import { getWorkloadStats, getMostAvailableMembers } from '../lib/utils';
+import { detectRisks } from '../lib/riskDetector';
+import { RiskAlertPanel } from './RiskAlertPanel';
+import { BurndownChart } from './BurndownChart';
 
 interface DashboardViewProps {
   tasks: Task[];
@@ -37,6 +40,17 @@ export const DashboardView = ({ tasks, agendas = [] }: DashboardViewProps) => {
 
   // Workload Analysis
   const workloadStats = useMemo(() => getWorkloadStats(tasks), [tasks]);
+  const risks = useMemo(() => detectRisks(tasks), [tasks]);
+
+  // Sprint date range: earliest start_date to latest end_date
+  const sprintDates = useMemo(() => {
+    const starts = tasks.filter(t => t.start_date).map(t => t.start_date);
+    const ends = tasks.filter(t => t.end_date).map(t => t.end_date);
+    return {
+      start: starts.length > 0 ? starts.sort()[0] : new Date().toISOString(),
+      end: ends.length > 0 ? ends.sort().reverse()[0] : new Date(Date.now() + 14 * 86400000).toISOString(),
+    };
+  }, [tasks]);
   const availableMembers = useMemo(() => getMostAvailableMembers(tasks, 3), [tasks]);
   const busiestMembers = useMemo(() => [...workloadStats].reverse().slice(0, 3), [workloadStats]);
   const total = tasks.length;
@@ -274,6 +288,12 @@ export const DashboardView = ({ tasks, agendas = [] }: DashboardViewProps) => {
             </ResponsiveContainer>
           </div>
         </div>
+      </div>
+
+      {/* Risk Alerts + Burndown Chart */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <RiskAlertPanel risks={risks} />
+        <BurndownChart tasks={tasks} sprintStart={sprintDates.start} sprintEnd={sprintDates.end} />
       </div>
 
       {/* Deadline upcoming */}

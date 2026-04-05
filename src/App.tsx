@@ -3,29 +3,33 @@
  * Optimistic UI + Supabase Realtime + Full State Management
  */
 
-import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useCallback, createContext, useContext, lazy, Suspense } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from './lib/supabase';
 import { Task, Agenda, Meeting, Decision, PresenceUser } from './types';
 import { ThemeProvider } from 'next-themes';
 
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
-import { DashboardView } from './components/DashboardView';
-import { TasksView } from './components/TasksView';
-import { DocsView } from './components/DocsView';
-import { DriveView } from './components/DriveView';
-import { CalendarView } from './components/CalendarView';
-import { DecisionsView } from './components/DecisionsView';
-import { AgendasView } from './components/AgendasView';
-import { GanttView } from './components/GanttView';
-import { HomeView } from './components/HomeView';
 import { IntroAnimation } from './components/IntroAnimation';
 import { AuthView } from './components/AuthView';
 import { CommandPalette } from './components/CommandPalette';
 import { SkeletonLoader } from './components/SkeletonLoader';
 import { BottomNav } from './components/BottomNav';
 import { ToastProvider } from './components/Toast';
+import { ErrorBoundary } from './components/ErrorBoundary';
+
+// Lazy-loaded view components for code-splitting
+const DashboardView = lazy(() => import('./components/DashboardView').then(m => ({ default: m.DashboardView })));
+const TasksView = lazy(() => import('./components/TasksView').then(m => ({ default: m.TasksView })));
+const DocsView = lazy(() => import('./components/DocsView').then(m => ({ default: m.DocsView })));
+const DriveView = lazy(() => import('./components/DriveView').then(m => ({ default: m.DriveView })));
+const CalendarView = lazy(() => import('./components/CalendarView').then(m => ({ default: m.CalendarView })));
+const DecisionsView = lazy(() => import('./components/DecisionsView').then(m => ({ default: m.DecisionsView })));
+const AgendasView = lazy(() => import('./components/AgendasView').then(m => ({ default: m.AgendasView })));
+const GanttView = lazy(() => import('./components/GanttView').then(m => ({ default: m.GanttView })));
+const HomeView = lazy(() => import('./components/HomeView').then(m => ({ default: m.HomeView })));
+const KanbanView = lazy(() => import('./components/KanbanView').then(m => ({ default: m.KanbanView })));
 
 // Global App Context for Optimistic UI
 export interface AppContextType {
@@ -84,13 +88,56 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // --- Session ---
+  // --- Session: Supabase auth as single source of truth ---
   useEffect(() => {
-    const savedSession = localStorage.getItem('hallaon_session');
-    if (savedSession) {
-      try { setSession(JSON.parse(savedSession)); }
-      catch { localStorage.removeItem('hallaon_session'); }
-    }
+    const checkAuth = async () => {
+      // 1. Try Supabase real session first
+      const { data: { session: authSession } } = await supabase.auth.getSession();
+      if (authSession) {
+        const appSession = {
+          user: {
+            id: authSession.user.id,
+            email: authSession.user.email,
+            name: authSession.user.user_metadata?.full_name ||
+                  authSession.user.email?.split('@')[0] || 'User',
+            role: 'authenticated',
+          }
+        };
+        localStorage.setItem('hallaon_session', JSON.stringify(appSession));
+        setSession(appSession);
+      } else {
+        // Fallback: check localStorage (for backward compat)
+        const savedSession = localStorage.getItem('hallaon_session');
+        if (savedSession) {
+          try { setSession(JSON.parse(savedSession)); }
+          catch { localStorage.removeItem('hallaon_session'); }
+        }
+      }
+    };
+    checkAuth();
+
+    // Subscribe to auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, authSession) => {
+        if (authSession) {
+          const appSession = {
+            user: {
+              id: authSession.user.id,
+              email: authSession.user.email,
+              name: authSession.user.user_metadata?.full_name ||
+                    authSession.user.email?.split('@')[0] || 'User',
+              role: 'authenticated',
+            }
+          };
+          localStorage.setItem('hallaon_session', JSON.stringify(appSession));
+          setSession(appSession);
+        } else {
+          localStorage.removeItem('hallaon_session');
+          setSession(null);
+        }
+      }
+    );
+    return () => subscription?.unsubscribe();
   }, []);
 
   const handleAuthSuccess = () => {
@@ -211,24 +258,18 @@ function AppContent() {
     }
   }, []);
 
+  // Consolidated Realtime: single multiplexed channel (reduces from 5 to 2 channels per user)
   useEffect(() => {
     if (!session) return;
     fetchData(true);
-    const channels = [
-      supabase.channel('rt-tasks')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, handleRealtimeTask)
-        .subscribe(),
-      supabase.channel('rt-agendas')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'agendas' }, handleRealtimeAgenda)
-        .subscribe(),
-      supabase.channel('rt-meetings')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, handleRealtimeMeeting)
-        .subscribe(),
-      supabase.channel('rt-decisions')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'decisions' }, handleRealtimeDecision)
-        .subscribe(),
-    ];
-    return () => { channels.forEach(c => supabase.removeChannel(c)); };
+    const channel = supabase
+      .channel('rt-all')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, handleRealtimeTask)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agendas' }, handleRealtimeAgenda)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, handleRealtimeMeeting)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'decisions' }, handleRealtimeDecision)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [session, fetchData, handleRealtimeTask, handleRealtimeAgenda, handleRealtimeMeeting, handleRealtimeDecision]);
 
   // --- Optimistic Mutators ---
@@ -314,26 +355,31 @@ function AppContent() {
             {loading ? (
               <SkeletonLoader />
             ) : (
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeTab}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.15, ease: 'easeOut' }}
-                  className="h-full"
-                >
-                  {activeTab === 'home' && <HomeView tasks={tasks} agendas={agendas} meetings={meetings} onNavigate={setActiveTab} />}
-                  {activeTab === 'dashboard' && <DashboardView tasks={tasks} agendas={agendas} />}
-                  {activeTab === 'tasks' && <TasksView tasks={tasks} />}
-                  {activeTab === 'gantt' && <GanttView tasks={tasks} />}
-                  {activeTab === 'docs' && <DocsView meetings={meetings} />}
-                  {activeTab === 'drive' && <DriveView />}
-                  {activeTab === 'calendar' && <CalendarView tasks={tasks} agendas={agendas} meetings={meetings} />}
-                  {activeTab === 'agendas' && <AgendasView agendas={agendas} />}
-                  {activeTab === 'decisions' && <DecisionsView decisions={decisions} agendas={agendas} />}
-                </motion.div>
-              </AnimatePresence>
+              <ErrorBoundary fallbackMessage="이 뷰를 로드하는 중 오류가 발생했습니다.">
+                <Suspense fallback={<SkeletonLoader />}>
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={activeTab}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.15, ease: 'easeOut' }}
+                      className="h-full"
+                    >
+                      {activeTab === 'home' && <HomeView tasks={tasks} agendas={agendas} meetings={meetings} onNavigate={setActiveTab} />}
+                      {activeTab === 'dashboard' && <DashboardView tasks={tasks} agendas={agendas} />}
+                      {activeTab === 'tasks' && <TasksView tasks={tasks} />}
+                      {activeTab === 'gantt' && <GanttView tasks={tasks} />}
+                      {activeTab === 'kanban' && <KanbanView tasks={tasks} />}
+                      {activeTab === 'docs' && <DocsView meetings={meetings} />}
+                      {activeTab === 'drive' && <DriveView />}
+                      {activeTab === 'calendar' && <CalendarView tasks={tasks} agendas={agendas} meetings={meetings} />}
+                      {activeTab === 'agendas' && <AgendasView agendas={agendas} />}
+                      {activeTab === 'decisions' && <DecisionsView decisions={decisions} agendas={agendas} />}
+                    </motion.div>
+                  </AnimatePresence>
+                </Suspense>
+              </ErrorBoundary>
             )}
           </main>
         </div>

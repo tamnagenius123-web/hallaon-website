@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Agenda } from '../types';
 import { supabase } from '../lib/supabase';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Plus, CheckCircle2, Clock, User, Tag, Calendar, 
   Trash2, Pencil, X, Check, Search, Send, 
@@ -134,6 +134,8 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
       const message = formatAgendaForDiscord(agenda);
       const ok = await sendDiscordNotification(message);
       if (ok) {
+        // Fix: Optimistic update for is_sent flag
+        optimisticUpdateAgenda(agenda.id, { is_sent: true });
         await supabase.from('agendas').update({ is_sent: true }).eq('id', agenda.id);
         showToast(`"${agenda.title}" 디스코드 전송 완료!`);
       } else {
