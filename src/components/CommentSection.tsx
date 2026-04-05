@@ -8,7 +8,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Comment } from '../types';
 import { useAppContext } from '../App';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { MessageSquare, Send, Trash2, Pencil, X, Check, MoreHorizontal } from 'lucide-react';
 import { cn, formatDate } from '../lib/utils';
 

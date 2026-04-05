@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect, useCallback, createContext, useContext, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle2, AlertCircle, AlertTriangle, Info, X, Undo2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 

@@ -1,7 +1,7 @@
 /**
  * PERT/CPM Algorithm for Hanraon
  * Calculates Expected Time (TE) and Critical Path
- * Predecessor is based on WBS code, not task id
+ * Predecessor is based on WBS code, supports comma-separated multiple predecessors
  */
 
 import { Task } from '../types';
@@ -18,7 +18,7 @@ export const calculateTE = (task: Task): number => {
 
 /**
  * Forward Pass & Backward Pass to find Critical Path
- * Predecessor is matched by wbs_code
+ * Predecessor supports comma-separated WBS codes (e.g. "1.1, 1.2")
  */
 export const calculateCriticalPath = (tasks: Task[]): Task[] => {
   if (!tasks || tasks.length === 0) return [];
@@ -35,40 +35,48 @@ export const calculateCriticalPath = (tasks: Task[]): Task[] => {
     if (t.wbs_code) byWbs[t.wbs_code.trim()] = t;
   });
 
-  // 1. Forward Pass (topological order)
-  // Repeated passes to handle dependencies
+  /**
+   * Parse predecessor string into array of WBS codes
+   * Supports: "1.1", "1.1, 1.2", "1.1,1.2,1.3"
+   */
+  const parsePredecessors = (pred?: string): string[] => {
+    if (!pred || !pred.trim()) return [];
+    return pred.split(',').map(s => s.trim()).filter(Boolean);
+  };
+
+  // 1. Forward Pass — supports multiple predecessors
   for (let pass = 0; pass < processedTasks.length; pass++) {
     processedTasks.forEach(task => {
-      if (!task.predecessor || !task.predecessor.trim()) {
+      const predCodes = parsePredecessors(task.predecessor);
+      
+      if (predCodes.length === 0) {
         task.es = 0;
         task.ef = task.exp_time!;
       } else {
-        const pred = byWbs[task.predecessor.trim()];
-        if (pred) {
-          task.es = pred.ef || 0;
-          task.ef = task.es + (task.exp_time || 0);
-        } else {
-          task.es = 0;
-          task.ef = task.exp_time!;
+        // ES = max(EF of all predecessors)
+        let maxEF = 0;
+        for (const code of predCodes) {
+          const pred = byWbs[code];
+          if (pred && (pred.ef || 0) > maxEF) {
+            maxEF = pred.ef || 0;
+          }
         }
+        task.es = maxEF;
+        task.ef = task.es + (task.exp_time || 0);
       }
     });
   }
 
   // 2. Backward Pass
   const maxEF = Math.max(...processedTasks.map(t => t.ef || 0), 0);
-  
-  processedTasks.forEach(task => {
-    task.lf = maxEF;
-    task.ls = maxEF - (task.exp_time || 0);
-  });
 
-  // Find successors for each task and update lf/ls
   for (let pass = 0; pass < processedTasks.length; pass++) {
     processedTasks.forEach(task => {
-      const successors = processedTasks.filter(s => 
-        s.predecessor && s.predecessor.trim() === task.wbs_code?.trim()
-      );
+      // Find all successors (tasks that list this task as predecessor)
+      const successors = processedTasks.filter(s => {
+        const predCodes = parsePredecessors(s.predecessor);
+        return predCodes.includes(task.wbs_code?.trim() || '');
+      });
       
       if (successors.length === 0) {
         task.lf = maxEF;

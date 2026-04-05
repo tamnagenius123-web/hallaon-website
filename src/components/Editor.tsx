@@ -11,6 +11,7 @@ import {
   Lightbulb, AlertCircle, Info, Zap
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useTheme } from 'next-themes';
 
 interface EditorProps {
   initialContent?: any;
@@ -55,6 +56,7 @@ const SLASH_MENU_CONFIG: Record<string, { icon: any, subtext: string }> = {
 };
 
 export const HanraonEditor = ({ initialContent, onChange }: EditorProps) => {
+  const { resolvedTheme } = useTheme();
   const parsedContent = useMemo(() => parseContentToBlocks(initialContent), [initialContent]);
 
   const editor = useCreateBlockNote({
@@ -156,7 +158,7 @@ export const HanraonEditor = ({ initialContent, onChange }: EditorProps) => {
     <div className="min-h-[500px] w-full max-w-4xl mx-auto">
       <BlockNoteView
         editor={editor}
-        theme="light"
+        theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
         onChange={() => {
           if (onChange) {
             onChange(JSON.stringify(editor.document));

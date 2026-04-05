@@ -22,7 +22,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const auth = new google.auth.GoogleAuth({
       credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON!),
-      scopes: ['https://www.googleapis.com/auth/drive'], // 👈 전체 권한 유지!
+      scopes: [
+        'https://www.googleapis.com/auth/drive.readonly',
+        'https://www.googleapis.com/auth/drive.file', // app-created files only
+      ],
     });
 
     const drive = google.drive({ version: 'v3', auth });

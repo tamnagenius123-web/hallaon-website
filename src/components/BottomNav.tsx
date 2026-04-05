@@ -5,11 +5,11 @@
  */
 
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Sun, ListTodo, ClipboardList, BookOpen, MoreHorizontal,
   BarChart2, LayoutDashboard, Calendar, Scale, HardDrive,
-  Home, X, Settings, Moon, LogOut, Search
+  Home, X, Settings, Moon, LogOut, Search, Columns3
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTheme } from 'next-themes';
@@ -31,6 +31,7 @@ const MAIN_TABS = [
 
 const MORE_ITEMS = [
   { id: 'dashboard', icon: BarChart2, label: '대시보드' },
+  { id: 'kanban', icon: Columns3, label: '칸반 보드' },
   { id: 'gantt', icon: LayoutDashboard, label: '간트 차트' },
   { id: 'calendar', icon: Calendar, label: '캘린더' },
   { id: 'decisions', icon: Scale, label: '의사결정' },

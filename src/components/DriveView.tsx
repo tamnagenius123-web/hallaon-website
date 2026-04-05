@@ -252,12 +252,11 @@ export const DriveView = () => {
   }, [fetchItems]);
 
   const handleDownload = (fileId: string, fileName: string) => {
-    const a = document.createElement('a');
-    a.href = `/api/drive/download/${fileId}?name=${encodeURIComponent(fileName)}`;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // Use window.open for 302 redirect compatibility (large files)
+    window.open(
+      `/api/drive/download/${fileId}?name=${encodeURIComponent(fileName)}`,
+      '_blank'
+    );
   };
 
   // 👇 파일 업로드 실행 함수 추가
