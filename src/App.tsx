@@ -106,12 +106,11 @@ function AppContent() {
         localStorage.setItem('hallaon_session', JSON.stringify(appSession));
         setSession(appSession);
       } else {
-        // Fallback: check localStorage (for backward compat)
-        const savedSession = localStorage.getItem('hallaon_session');
-        if (savedSession) {
-          try { setSession(JSON.parse(savedSession)); }
-          catch { localStorage.removeItem('hallaon_session'); }
-        }
+        // Supabase 세션이 null이면 stale mock localStorage을 정리한다.
+        // Why: 만료된 mock session을 부활시키면 UI는 logged-in이지만 supabase 클라이언트는 anon이라
+        //      RLS(auth.role() = 'authenticated')가 INSERT/UPDATE를 거부하여 "저장 실패" 경고가 발생.
+        localStorage.removeItem('hallaon_session');
+        setSession(null);
       }
     };
     checkAuth();

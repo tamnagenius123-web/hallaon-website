@@ -3,10 +3,11 @@ import type { Block } from '@blocknote/core';
 import { Meeting } from '../types';
 import { supabase } from '../lib/supabase';
 import { useAppContext } from '../App';
+import { useToast } from './Toast';
 import {
   Plus, Trash2, X, ChevronRight, ChevronDown,
-  Search, BookOpen, Save, Image, Clock, 
-  Download, CloudUpload, Loader2 
+  Search, BookOpen, Save, Image, Clock,
+  Download, CloudUpload, Loader2
 } from 'lucide-react';
 import { TEAM_OPTIONS as ORG_TEAMS, TEAM_COLORS as ORG_COLORS } from '../lib/orgChart';
 
@@ -71,7 +72,8 @@ const CoverPicker = ({ onSelect, onClose }: { onSelect: (g: string) => void; onC
 );
 
 export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
-  const { optimisticAddMeeting, optimisticUpdateMeeting, optimisticDeleteMeeting } = useAppContext();
+  const { optimisticAddMeeting, optimisticUpdateMeeting, optimisticDeleteMeeting, session } = useAppContext();
+  const { showToast } = useToast();
   const [meetings, setMeetings] = useState<Meeting[]>(initialMeetings);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState('전체 회의');
@@ -97,10 +99,16 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
 
   const handleEditorSave = useCallback(async (contentStr: string) => {
     if (!selectedId) return;
-    await supabase.from('meetings').update({ content: contentStr }).eq('id', selectedId);
+    // RLS·네트워크 등 UPDATE 실패를 silent로 흘리면 사용자가 미저장 사실을 모른다.
+    const { error } = await supabase.from('meetings').update({ content: contentStr }).eq('id', selectedId);
+    if (error) {
+      console.error('문서 저장 실패:', error);
+      showToast(`저장에 실패했습니다: ${error.message}`, 'error');
+      return;
+    }
     optimisticUpdateMeeting(selectedId, { content: contentStr });
     setSavedAt(new Date());
-  }, [selectedId, optimisticUpdateMeeting]);
+  }, [selectedId, optimisticUpdateMeeting, showToast]);
 
   const handleMetaUpdate = useCallback(async (patch: Record<string, any>) => {
     if (!selectedId) return;
@@ -109,16 +117,27 @@ export const DocsView = ({ meetings: initialMeetings }: DocsViewProps) => {
     const safePatch: Record<string, any> = {};
     if (patch.title !== undefined) safePatch.title = patch.title;
     if (Object.keys(safePatch).length > 0) {
-      await supabase.from('meetings').update(safePatch).eq('id', selectedId);
+      const { error } = await supabase.from('meetings').update(safePatch).eq('id', selectedId);
+      if (error) {
+        console.error('문서 메타 저장 실패:', error);
+        showToast(`제목 저장에 실패했습니다: ${error.message}`, 'error');
+      }
     }
-  }, [selectedId, optimisticUpdateMeeting]);
+  }, [selectedId, optimisticUpdateMeeting, showToast]);
 
   const handleCreateDoc = async () => {
     if (creating) return;
     setCreating(true);
     const title = newForm.title.trim() || '새 문서';
     const initialBlocks: Block[] = [{ id: Math.random().toString(36).slice(2), type: 'heading', props: { level: 1 }, content: [{ type: 'text', text: title, styles: {} }], children: [] } as any];
-    const payload = { category: newForm.category, date: new Date().toISOString().split('T')[0], title, author_id: 'user', content: JSON.stringify(initialBlocks) };
+    // author_id는 인증된 사용자 id를 그대로 기록한다 (이전엔 'user' 하드코딩으로 추적 손실).
+    const payload = {
+      category: newForm.category,
+      date: new Date().toISOString().split('T')[0],
+      title,
+      author_id: session?.user?.id ?? 'unknown',
+      content: JSON.stringify(initialBlocks),
+    };
     try {
       const { data, error } = await supabase.from('meetings').insert([payload]).select().single();
       if (error) throw error;
