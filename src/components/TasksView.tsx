@@ -108,7 +108,13 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
       ? (newForm.opt_time + 4 * newForm.prob_time + newForm.pess_time) / 6
       : 0;
     
-    const payload = { ...newForm, exp_time: teVal };
+    // wbs_code는 UNIQUE constraint이므로 빈 문자열을 NULL로 정규화한다.
+    // Why: 빈 문자열은 NULL과 달리 UNIQUE 충돌을 일으켜 두 번째 사용자의 INSERT가 23505로 실패함.
+    const payload = {
+      ...newForm,
+      exp_time: teVal,
+      wbs_code: newForm.wbs_code?.trim() ? newForm.wbs_code.trim() : null,
+    };
     
     try {
       if (selectedTask) {
