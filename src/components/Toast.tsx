@@ -51,7 +51,7 @@ const STYLES: Record<ToastType, string> = {
 const ToastItem = ({ toast, onRemove }: { toast: ToastItem; onRemove: (id: string) => void }) => {
   const [progress, setProgress] = useState(100);
   const startTime = useRef(Date.now());
-  const frameRef = useRef<number>();
+  const frameRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const tick = () => {

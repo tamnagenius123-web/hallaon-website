@@ -5,7 +5,6 @@ import React, { useState, useCallback } from 'react';
 import { Task } from '../types';
 import { useAppContext } from '../App';
 import { supabase } from '../lib/supabase';
-import { motion } from 'motion/react';
 import { User, Calendar, Flag, Columns3 } from 'lucide-react';
 import { cn, formatDate } from '../lib/utils';
 import { useToast } from './Toast';
@@ -126,13 +125,10 @@ export const KanbanView = ({ tasks }: KanbanViewProps) => {
               {/* Cards */}
               <div className="space-y-2 p-2 min-h-[100px]">
                 {columnTasks.map(task => (
-                  <motion.div
+                  <div
                     key={task.id}
                     draggable
                     onDragStart={e => handleDragStart(e, task)}
-                    layout
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
                     className={cn(
                       'notion-card p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow',
                       task.is_critical && 'border-red-200 dark:border-red-800',
@@ -167,7 +163,7 @@ export const KanbanView = ({ tasks }: KanbanViewProps) => {
                         </span>
                       </div>
                     )}
-                  </motion.div>
+                  </div>
                 ))}
                 {columnTasks.length === 0 && (
                   <div className="text-center text-xs text-muted-foreground py-8 opacity-50">

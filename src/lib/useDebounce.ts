@@ -8,7 +8,7 @@ export function useDebouncedCallback<T extends (...args: any[]) => any>(
   callback: T,
   delay: number
 ): T {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   return useCallback((...args: any[]) => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
