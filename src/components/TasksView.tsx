@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Task } from '../types';
 import { calculateCriticalPath } from '../lib/pert';
 import { supabase } from '../lib/supabase';
@@ -57,6 +57,11 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showSidePeek, setShowSidePeek] = useState(false);
   const [form, setForm] = useState<TaskForm>(defaultForm);
+  const formRef = useRef(form);
+  useEffect(() => { formRef.current = form; }, [form]);
+  // Why: 첫 INSERT 응답 round-trip 동안 selectedTask 가 null 인 상태로 추가 onChange 가 들어와도
+  // INSERT 중복을 차단. round-trip 종료 후 form 이 snapshot 과 다르면 한 번 UPDATE 로 flush.
+  const creatingRef = useRef(false);
   const [filterStatus, setFilterStatus] = useState('전체');
   const [filterTeam, setFilterTeam] = useState('전체');
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,40 +103,71 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
     setShowSidePeek(true);
   };
 
+  // wbs_code는 UNIQUE constraint이므로 빈 문자열을 NULL로 정규화한다.
+  // Why: 빈 문자열은 NULL과 달리 UNIQUE 충돌을 일으켜 두 번째 사용자의 INSERT가 23505로 실패함.
+  const buildPayload = (src: TaskForm) => {
+    const teVal = src.opt_time && src.prob_time && src.pess_time
+      ? (src.opt_time + 4 * src.prob_time + src.pess_time) / 6
+      : 0;
+    return {
+      ...src,
+      exp_time: teVal,
+      wbs_code: src.wbs_code?.trim() ? src.wbs_code.trim() : null,
+    };
+  };
+
   const handleSave = async (updatedFields: Partial<TaskForm>) => {
     const newForm = { ...form, ...updatedFields };
     setForm(newForm);
-    
+
     if (!newForm.title.trim()) return;
-    
-    const teVal = newForm.opt_time && newForm.prob_time && newForm.pess_time
-      ? (newForm.opt_time + 4 * newForm.prob_time + newForm.pess_time) / 6
-      : 0;
-    
-    // wbs_code는 UNIQUE constraint이므로 빈 문자열을 NULL로 정규화한다.
-    // Why: 빈 문자열은 NULL과 달리 UNIQUE 충돌을 일으켜 두 번째 사용자의 INSERT가 23505로 실패함.
-    const payload = {
-      ...newForm,
-      exp_time: teVal,
-      wbs_code: newForm.wbs_code?.trim() ? newForm.wbs_code.trim() : null,
-    };
-    
+    // 첫 INSERT 는 commitNewTask() 가 담당. selectedTask 가 null 인 동안 onChange 의 INSERT 호출을 차단해
+    // 매 키스트로크가 새 row 를 만들던 race 를 끊는다.
+    if (!selectedTask) return;
+
+    const payload = buildPayload(newForm);
+
     try {
-      if (selectedTask) {
-        optimisticUpdateTask(selectedTask.id, payload);
-        const { error } = await supabase.from('tasks').update(payload).eq('id', selectedTask.id);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase.from('tasks').insert([payload]).select().single();
-        if (error) throw error;
-        if (data) {
-          optimisticAddTask(data);
-          setSelectedTask(data);
-        }
+      optimisticUpdateTask(selectedTask.id, payload);
+      const { error } = await supabase.from('tasks').update(payload).eq('id', selectedTask.id);
+      if (error) throw error;
+    } catch (err) {
+      console.error('저장 실패:', err);
+      showToast('저장에 실패했습니다.', 'error');
+    }
+  };
+
+  const commitNewTask = async () => {
+    if (selectedTask || creatingRef.current) return;
+    const snapshot = formRef.current;
+    if (!snapshot.title.trim()) return;
+
+    creatingRef.current = true;
+    try {
+      const snapshotPayload = buildPayload(snapshot);
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert([snapshotPayload])
+        .select()
+        .single();
+      if (error) throw error;
+      if (!data) return;
+      optimisticAddTask(data);
+      setSelectedTask(data);
+
+      // round-trip 동안 사용자가 추가 편집한 필드를 후속 UPDATE 로 flush.
+      const latest = formRef.current;
+      const drifted = (Object.keys(latest) as (keyof TaskForm)[]).some(k => latest[k] !== snapshot[k]);
+      if (drifted) {
+        const latestPayload = buildPayload(latest);
+        optimisticUpdateTask(data.id, latestPayload);
+        await supabase.from('tasks').update(latestPayload).eq('id', data.id);
       }
     } catch (err) {
       console.error('저장 실패:', err);
       showToast('저장에 실패했습니다.', 'error');
+    } finally {
+      creatingRef.current = false;
     }
   };
 
@@ -414,6 +450,7 @@ export const TasksView = ({ tasks: initialTasks }: TasksViewProps) => {
                 <textarea
                   value={form.title}
                   onChange={e => handleSave({ title: e.target.value })}
+                  onBlur={commitNewTask}
                   placeholder="제목 없음"
                   rows={1}
                   className="w-full text-4xl font-bold bg-transparent border-none outline-none resize-none placeholder:text-gray-200"

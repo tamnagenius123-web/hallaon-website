@@ -22,6 +22,7 @@ export interface Task {
   pess_time: number;
   exp_time: number;
   is_sent: boolean;
+  content?: any;
   // PERT/CPM calculated fields (not in DB, but used in UI)
   es?: number;
   ef?: number;
@@ -39,6 +40,7 @@ export interface Agenda {
   status: string;
   proposed_date: string;
   is_sent: boolean;
+  content?: any;
 }
 
 export interface Meeting {

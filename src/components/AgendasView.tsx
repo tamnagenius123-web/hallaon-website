@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Agenda } from '../types';
 import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
@@ -45,6 +45,11 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
   const [selectedAgenda, setSelectedAgenda] = useState<Agenda | null>(null);
   const [showSidePeek, setShowSidePeek] = useState(false);
   const [form, setForm] = useState<AgendaForm>(defaultForm);
+  const formRef = useRef(form);
+  useEffect(() => { formRef.current = form; }, [form]);
+  // Why: 첫 INSERT 응답 round-trip 동안 selectedAgenda 가 null 인 상태로 추가 onChange 가 들어와도
+  // INSERT 중복을 차단. round-trip 종료 후 form 이 snapshot 과 다르면 한 번 UPDATE 로 flush.
+  const creatingRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
@@ -82,25 +87,51 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
   const handleSave = async (updatedFields: Partial<AgendaForm>) => {
     const newForm = { ...form, ...updatedFields };
     setForm(newForm);
-    
+
     if (!newForm.title.trim()) return;
-    
+    // 첫 INSERT 는 commitNewAgenda() 가 담당. selectedAgenda 가 null 인 동안 onChange 의 INSERT 호출을 차단해
+    // 매 키스트로크가 새 row 를 만들던 race 를 끊는다.
+    if (!selectedAgenda) return;
+
     try {
-      if (selectedAgenda) {
-        optimisticUpdateAgenda(selectedAgenda.id, newForm);
-        const { error } = await supabase.from('agendas').update(newForm).eq('id', selectedAgenda.id);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase.from('agendas').insert([{ ...newForm, is_sent: false }]).select().single();
-        if (error) throw error;
-        if (data) {
-          optimisticAddAgenda(data);
-          setSelectedAgenda(data);
-        }
+      optimisticUpdateAgenda(selectedAgenda.id, newForm);
+      const { error } = await supabase.from('agendas').update(newForm).eq('id', selectedAgenda.id);
+      if (error) throw error;
+    } catch (err) {
+      console.error('저장 실패:', err);
+      showToast('저장에 실패했습니다.', 'error');
+    }
+  };
+
+  const commitNewAgenda = async () => {
+    if (selectedAgenda || creatingRef.current) return;
+    const snapshot = formRef.current;
+    if (!snapshot.title.trim()) return;
+
+    creatingRef.current = true;
+    try {
+      const { data, error } = await supabase
+        .from('agendas')
+        .insert([{ ...snapshot, is_sent: false }])
+        .select()
+        .single();
+      if (error) throw error;
+      if (!data) return;
+      optimisticAddAgenda(data);
+      setSelectedAgenda(data);
+
+      // round-trip 동안 사용자가 추가 편집한 필드를 후속 UPDATE 로 flush.
+      const latest = formRef.current;
+      const drifted = (Object.keys(latest) as (keyof AgendaForm)[]).some(k => latest[k] !== snapshot[k]);
+      if (drifted) {
+        optimisticUpdateAgenda(data.id, latest);
+        await supabase.from('agendas').update(latest).eq('id', data.id);
       }
     } catch (err) {
       console.error('저장 실패:', err);
       showToast('저장에 실패했습니다.', 'error');
+    } finally {
+      creatingRef.current = false;
     }
   };
 
@@ -362,6 +393,7 @@ export const AgendasView = ({ agendas }: AgendasViewProps) => {
                 <textarea
                   value={form.title}
                   onChange={e => handleSave({ title: e.target.value })}
+                  onBlur={commitNewAgenda}
                   placeholder="제목 없음"
                   rows={1}
                   className="w-full text-4xl font-bold bg-transparent border-none outline-none resize-none placeholder:text-gray-200"

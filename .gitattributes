@@ -1,0 +1,26 @@
+# hallaon-website repo EOL policy (CLAUDE.md §6, 2026-05-17 ratchet).
+# Mirrors parent hallaon-v5/.gitattributes plus this repo's primary
+# file types (.ts/.tsx/.js/.jsx/.css/.html/.env.example). Prevents
+# CRLF/LF drift from Windows core.autocrlf=true default. Renormalize
+# is deferred (gradual normalize on future writes).
+
+* text=auto
+
+*.py text eol=lf
+*.sh text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.diff text eol=lf
+*.patch text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.env.example text eol=lf
