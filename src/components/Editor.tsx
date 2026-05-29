@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import { SuggestionMenuController, getDefaultReactSlashMenuItems } from '@blocknote/react';
 import '@blocknote/mantine/style.css';
-import type { Block } from '@blocknote/core';
+import type { PartialBlock } from '@blocknote/core';
 import { 
   HardDrive, Type, Heading1, Heading2, Heading3, 
   List, ListOrdered, CheckSquare, Quote, 
@@ -11,6 +11,7 @@ import {
   Lightbulb, AlertCircle, Info, Zap
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useDebouncedCallback } from '../lib/useDebounce';
 import { useTheme } from 'next-themes';
 
 interface EditorProps {
@@ -19,22 +20,24 @@ interface EditorProps {
 }
 
 // 초기 데이터 안전하게 파싱
-function parseContentToBlocks(raw: any): Block[] | undefined {
+// PartialBlock 정합 shape 반환 (BlockNote PartialBlockFromConfigNoChildren).
+// fallback string lines 도 styled-text inline content 로 정규화하여 paragraph 블록 일관성 유지.
+function parseContentToBlocks(raw: any): PartialBlock[] | undefined {
   if (!raw) return undefined;
-  if (Array.isArray(raw) && raw.length > 0 && raw[0]?.type) return raw as Block[];
+  if (Array.isArray(raw) && raw.length > 0 && raw[0]?.type) return raw as PartialBlock[];
   if (typeof raw === 'string') {
     const trimmed = raw.trim();
     if (!trimmed) return undefined;
     if (trimmed.startsWith('[')) {
       try {
         const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed) && parsed[0]?.type) return parsed as Block[];
+        if (Array.isArray(parsed) && parsed[0]?.type) return parsed as PartialBlock[];
       } catch {}
     }
     return trimmed.split('\n').filter(Boolean).map(line => ({
       type: 'paragraph',
-      content: line,
-    })) as any;
+      content: [{ type: 'text', text: line, styles: {} }],
+    })) as PartialBlock[];
   }
   return undefined;
 }
@@ -59,9 +62,23 @@ export const HanraonEditor = ({ initialContent, onChange }: EditorProps) => {
   const { resolvedTheme } = useTheme();
   const parsedContent = useMemo(() => parseContentToBlocks(initialContent), [initialContent]);
 
+  // keystroke 마다 JSON.stringify + 부모 setState / supabase UPDATE 폭주 차단 (300ms idle 후 1회).
+  // 미저장 손실 위험은 cycle 4 의 onBlur flush 별도 사이클에서 다룬다.
+  const debouncedOnChange = useDebouncedCallback((content: string) => {
+    if (onChange) onChange(content);
+  }, 300);
+
   const editor = useCreateBlockNote({
     initialContent: parsedContent,
   });
+
+  // useCreateBlockNote 는 initialContent 변화를 추적하지 않는다. side-peek 전환 (selectedTask 변경 등)
+  // 시 editor 의 document 를 새 blocks 로 교체. DocsView 는 key remount 도 병행하나 AgendasView /
+  // TasksView 는 그렇지 않아 본 hook 이 stale editor 보호의 주 경로.
+  useEffect(() => {
+    if (!parsedContent) return;
+    editor.replaceBlocks(editor.document, parsedContent);
+  }, [parsedContent, editor]);
 
   const insertDriveFileItem = {
     title: '구글 드라이브 파일',
@@ -160,9 +177,7 @@ export const HanraonEditor = ({ initialContent, onChange }: EditorProps) => {
         editor={editor}
         theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
         onChange={() => {
-          if (onChange) {
-            onChange(JSON.stringify(editor.document));
-          }
+          debouncedOnChange(JSON.stringify(editor.document));
         }}
         slashMenu={false}
         className="bn-editor"
@@ -182,27 +197,6 @@ export const HanraonEditor = ({ initialContent, onChange }: EditorProps) => {
               (item) =>
                 (item.title && item.title.toLowerCase().includes(queryLower)) ||
                 (item.aliases && item.aliases.some((alias) => alias.toLowerCase().includes(queryLower)))
-            );
-          }}
-          renderItem={({ item, isSelected, onClick }) => {
-            const config = SLASH_MENU_CONFIG[item.title] || { icon: Zap, subtext: item.subtext || '' };
-            
-            return (
-              <div
-                onClick={onClick}
-                className={cn(
-                  "bn-slash-menu-item",
-                  isSelected && "bg-accent"
-                )}
-              >
-                <div className="bn-slash-menu-item-icon">
-                  {item.icon || <config.icon size={18} />}
-                </div>
-                <div className="bn-slash-menu-item-text">
-                  <span className="bn-slash-menu-item-title">{item.title}</span>
-                  <span className="bn-slash-menu-item-subtext">{config.subtext || item.subtext || ''}</span>
-                </div>
-              </div>
             );
           }}
         />

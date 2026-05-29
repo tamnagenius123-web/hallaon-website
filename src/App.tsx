@@ -30,6 +30,7 @@ const AgendasView = lazy(() => import('./components/AgendasView').then(m => ({ d
 const GanttView = lazy(() => import('./components/GanttView').then(m => ({ default: m.GanttView })));
 const HomeView = lazy(() => import('./components/HomeView').then(m => ({ default: m.HomeView })));
 const KanbanView = lazy(() => import('./components/KanbanView').then(m => ({ default: m.KanbanView })));
+const ExecutiveOSView = lazy(() => import('./components/ExecutiveOSView').then(m => ({ default: m.ExecutiveOSView })));
 
 // Global App Context for Optimistic UI
 export interface AppContextType {
@@ -375,6 +376,7 @@ function AppContent() {
                       {activeTab === 'calendar' && <CalendarView tasks={tasks} agendas={agendas} meetings={meetings} />}
                       {activeTab === 'agendas' && <AgendasView agendas={agendas} />}
                       {activeTab === 'decisions' && <DecisionsView decisions={decisions} agendas={agendas} />}
+                      {activeTab === 'executive-os' && <ExecutiveOSView tasks={tasks} agendas={agendas} decisions={decisions} />}
                     </motion.div>
                   </AnimatePresence>
                 </Suspense>

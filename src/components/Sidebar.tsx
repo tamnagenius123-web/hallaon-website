@@ -4,11 +4,10 @@ import {
   LogOut, HardDrive, Scale, Sun, Moon, ClipboardList,
   ChevronDown, ChevronRight, Home, BarChart2, BookOpen,
   ChevronLeft, ChevronRightIcon, Plus, Search, Settings,
-  Clock, Trash2, MoreHorizontal, Star, X, Columns3
+  Clock, Trash2, MoreHorizontal, Star, X, Columns3, ShieldCheck
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTheme } from 'next-themes';
-import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface SidebarProps {
@@ -69,6 +68,8 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   }
 ];
 
+NAV_GROUPS[1]?.items.push({ id: 'executive-os', icon: ShieldCheck, label: 'AI Executive OS' });
+
 const TAB_LABELS: Record<string, string> = {
   home: '홈 · 가이드',
   dashboard: '대시보드',
@@ -82,15 +83,13 @@ const TAB_LABELS: Record<string, string> = {
   drive: '자료실',
 };
 
+TAB_LABELS['executive-os'] = 'AI Executive OS';
+
 export const Sidebar = ({ activeTab, setActiveTab, onLogout, onOpenCommandPalette }: SidebarProps) => {
   const { theme, setTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [isHoveringSidebar, setIsHoveringSidebar] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['project-group', 'collab-group']));
-  const [pwExpanded, setPwExpanded] = useState(false);
-  const [newPw, setNewPw] = useState('');
-  const [newPw2, setNewPw2] = useState('');
-  const [pwMsg, setPwMsg] = useState('');
   const [recentPages, setRecentPages] = useState<RecentPage[]>([]);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [showRecent, setShowRecent] = useState(false);
@@ -145,17 +144,6 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout, onOpenCommandPalett
     setExpandedGroups(newSet);
   };
 
-  const handlePwChange = async () => {
-    if (!newPw || newPw !== newPw2) { setPwMsg('비밀번호를 확인하세요.'); return; }
-    try {
-      const { error } = await supabase.from('users').update({ password: newPw }).eq('name', userName);
-      if (error) throw error;
-      setPwMsg('변경 완료!');
-      setNewPw(''); setNewPw2('');
-      setTimeout(() => { setPwMsg(''); setPwExpanded(false); }, 2000);
-    } catch { setPwMsg('변경 실패. 다시 시도하세요.'); }
-  };
-
   return (
     <div 
       className="relative h-full flex shrink-0 transition-all duration-300 ease-in-out"
@@ -170,48 +158,14 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout, onOpenCommandPalett
           collapsed && "-translate-x-full"
         )}
       >
-        {/* User Profile Header */}
+        {/* User Profile Header — passwordless (magic-link) auth, no edit affordance here. */}
         <div className="p-3 mb-2">
-          <div 
-            className="flex items-center gap-2 p-1.5 rounded-md hover:bg-[var(--notion-hover)] cursor-pointer group"
-            onClick={() => setPwExpanded(!pwExpanded)}
-          >
+          <div className="flex items-center gap-2 p-1.5 rounded-md">
             <div className="w-5 h-5 rounded bg-primary text-primary-foreground flex items-center justify-center text-[10px] font-bold uppercase shrink-0">
               {userName?.[0] || 'U'}
             </div>
             <span className="text-sm font-semibold truncate flex-1">{userName}의 Workspace</span>
-            <ChevronDown size={14} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
-          
-          {/* Password Change Dropdown */}
-          <AnimatePresence>
-            {pwExpanded && (
-              <motion.div 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="mt-2 p-3 bg-secondary rounded-lg border border-border shadow-sm"
-              >
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">비밀번호 변경</div>
-                <input
-                  type="password"
-                  value={newPw}
-                  onChange={e => setNewPw(e.target.value)}
-                  placeholder="새 비밀번호"
-                  className="notion-input mb-1.5 text-xs h-8"
-                />
-                <input
-                  type="password"
-                  value={newPw2}
-                  onChange={e => setNewPw2(e.target.value)}
-                  placeholder="비밀번호 확인"
-                  className="notion-input mb-2 text-xs h-8"
-                />
-                {pwMsg && <div className={cn("text-[10px] mb-2 text-center", pwMsg.includes('완료') ? "text-green-500" : "text-red-500")}>{pwMsg}</div>}
-                <button onClick={handlePwChange} className="notion-btn-primary w-full h-7 text-xs">변경하기</button>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
         {/* Search & Recent */}

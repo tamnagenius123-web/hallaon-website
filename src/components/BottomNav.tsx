@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Sun, ListTodo, ClipboardList, BookOpen, MoreHorizontal,
   BarChart2, LayoutDashboard, Calendar, Scale, HardDrive,
-  Home, X, Settings, Moon, LogOut, Search, Columns3
+  Home, X, Settings, Moon, LogOut, Search, Columns3, ShieldCheck
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTheme } from 'next-themes';
@@ -37,6 +37,8 @@ const MORE_ITEMS = [
   { id: 'decisions', icon: Scale, label: '의사결정' },
   { id: 'drive', icon: HardDrive, label: '자료실' },
 ];
+
+MORE_ITEMS.push({ id: 'executive-os', icon: ShieldCheck, label: 'AI OS' });
 
 export const BottomNav = ({ activeTab, setActiveTab, onLogout, onOpenCommandPalette }: BottomNavProps) => {
   const [showMore, setShowMore] = useState(false);

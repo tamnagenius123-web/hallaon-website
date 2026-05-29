@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, ListTodo, ClipboardList, BookOpen, BarChart2,
   Calendar, Scale, HardDrive, Home, LayoutDashboard, X,
-  ArrowRight, Hash
+  ArrowRight, Hash, ShieldCheck
 } from 'lucide-react';
 import { useAppContext } from '../App';
 import { cn } from '../lib/utils';
@@ -40,6 +40,17 @@ const PAGES: SearchResult[] = [
   { id: 'nav-drive', type: 'page', title: '자료실', icon: <HardDrive size={16} />, subtitle: '페이지', action: () => {} },
 ];
 
+const EXEC_OS_PAGE: SearchResult = {
+  id: 'nav-executive-os',
+  type: 'page',
+  title: 'AI Executive OS',
+  subtitle: 'Workspace',
+  icon: <ShieldCheck size={16} />,
+  action: () => {},
+};
+
+const ALL_PAGES = [...PAGES, EXEC_OS_PAGE];
+
 const PAGE_TAB_MAP: Record<string, string> = {
   'nav-home': 'home',
   'nav-dashboard': 'dashboard',
@@ -48,6 +59,7 @@ const PAGE_TAB_MAP: Record<string, string> = {
   'nav-calendar': 'calendar',
   'nav-agendas': 'agendas',
   'nav-decisions': 'decisions',
+  'nav-executive-os': 'executive-os',
   'nav-docs': 'docs',
   'nav-drive': 'drive',
 };
@@ -74,7 +86,7 @@ export const CommandPalette = ({ isOpen, onClose, onNavigate }: CommandPalettePr
     const items: SearchResult[] = [];
 
     // Pages
-    const filteredPages = PAGES.filter(p =>
+    const filteredPages = ALL_PAGES.filter(p =>
       !q || p.title.toLowerCase().includes(q)
     ).map(p => ({
       ...p,
